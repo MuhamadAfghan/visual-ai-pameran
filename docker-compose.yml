@@ -51,7 +51,9 @@ services:
       retries: 5
       start_period: 20s
 
-  # ── Backend API server ──────────────────────────────────────
+  # ── Backend API server ───────────────────────────────────────
+  # Runs the inference worker, notification worker, and the daily cleanup
+  # schedule in-process (see src/server.ts) — no separate worker containers.
   backend-web:
     build: ./backend-web
     restart: unless-stopped
@@ -76,56 +78,6 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
-
-  # ── BullMQ workers ──────────────────────────────────────────
-  snapshot-worker:
-    build: ./backend-web
-    command: node dist/workers/snapshotWorker.js
-    restart: unless-stopped
-    env_file: ./backend-web/.env
-    environment:
-      MONGODB_URI: mongodb://mongodb:27017/cctv_detector
-      REDIS_URL: redis://redis:6379
-      AI_GRPC_TARGET: ai:50051
-    volumes:
-      - snapshot_storage:/app/storage
-    depends_on:
-      mongodb:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      ai:
-        condition: service_healthy
-
-  notification-worker:
-    build: ./backend-web
-    command: node dist/workers/notificationWorker.js
-    restart: unless-stopped
-    env_file: ./backend-web/.env
-    environment:
-      MONGODB_URI: mongodb://mongodb:27017/cctv_detector
-      REDIS_URL: redis://redis:6379
-    depends_on:
-      mongodb:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
-  cleanup-worker:
-    build: ./backend-web
-    command: node dist/workers/cleanupWorker.js
-    restart: unless-stopped
-    env_file: ./backend-web/.env
-    environment:
-      MONGODB_URI: mongodb://mongodb:27017/cctv_detector
-      REDIS_URL: redis://redis:6379
-    volumes:
-      - snapshot_storage:/app/storage
-    depends_on:
-      mongodb:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
 
 volumes:
   mongo_data:
