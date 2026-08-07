@@ -1,0 +1,51 @@
+{
+  "model_key": "hand_in_pocket",
+  "base_weight": "c:\\Users\\istd.magang125\\OneDrive - TMMIN\\Documents\\cctv-insight\\ai\\models\\yolo26m.pt",
+  "run_dir": "c:\\Users\\istd.magang125\\OneDrive - TMMIN\\Documents\\cctv-insight\\ai\\research\\runs\\detect\\hand_in_pocket_yolo26m",
+  "best_pt": "c:\\Users\\istd.magang125\\OneDrive - TMMIN\\Documents\\cctv-insight\\ai\\research\\runs\\detect\\hand_in_pocket_yolo26m\\weights\\best.pt",
+  "data_yaml": "c:\\Users\\istd.magang125\\OneDrive - TMMIN\\Documents\\cctv-insight\\ai\\research\\datasets\\processed\\hand_in_pocket\\data.yaml",
+  "class_names": [
+    "hand_in_pocket",
+    "no_hand_in_pocket"
+  ],
+  "seed": 42,
+  "train_cfg": {
+    "epochs": 150,
+    "imgsz": 640,
+    "batch": 8,
+    "workers": 4,
+    "patience": 40,
+    "seed": 42,
+    "cos_lr": true,
+    "close_mosaic": 10,
+    "hsv_h": 0.015,
+    "hsv_s": 0.7,
+    "hsv_v": 0.4,
+    "degrees": 10.0,
+    "translate": 0.1,
+    "scale": 0.5,
+    "shear": 3.0,
+    "fliplr": 0.5,
+    "mosaic": 1.0,
+    "mixup": 0.15,
+    "project": "c:\\Users\\istd.magang125\\OneDrive - TMMIN\\Documents\\cctv-insight\\ai\\research\\runs\\detect",
+    "name": "hand_in_pocket_yolo26m",
+    "exist_ok": true
+  },
+  "eval_cfg": {
+    "conf": 0.25,
+    "imgsz": 640,
+    "split": "val"
+  },
+  "device": "cuda",
+  "metrics": {
+    "mAP50": 0.5570918103299011,
+    "mAP50-95": 0.2529087592989735,
+    "precision": 0.7647083494583725,
+    "recall": 0.6095683665148893
+  },
+  "speed_ms": {
+    "total": 17.29083560725174,
+    "fps": 57.8341048815826
+  }
+}

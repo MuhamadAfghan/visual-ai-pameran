@@ -1,0 +1,14 @@
+{
+  "seed": 42,
+  "ratios": {
+    "train": 0.7,
+    "valid": 0.2,
+    "test": 0.1
+  },
+  "counts": {
+    "train": 1222,
+    "valid": 349,
+    "test": 176
+  },
+  "total": 1747
+}

@@ -1,0 +1,50 @@
+{
+  "model_key": "using_phone",
+  "base_weight": "c:\\Users\\istd.magang125\\OneDrive - TMMIN\\Documents\\cctv-insight\\ai\\models\\yolo26m.pt",
+  "run_dir": "c:\\Users\\istd.magang125\\OneDrive - TMMIN\\Documents\\cctv-insight\\ai\\research\\runs\\detect\\smartphone_yolo26m",
+  "best_pt": "c:\\Users\\istd.magang125\\OneDrive - TMMIN\\Documents\\cctv-insight\\ai\\research\\runs\\detect\\smartphone_yolo26m\\weights\\best.pt",
+  "data_yaml": "c:\\Users\\istd.magang125\\OneDrive - TMMIN\\Documents\\cctv-insight\\ai\\research\\datasets\\processed\\using_phone\\data.yaml",
+  "class_names": [
+    "smartphone"
+  ],
+  "seed": 42,
+  "train_cfg": {
+    "epochs": 150,
+    "imgsz": 640,
+    "batch": 8,
+    "workers": 4,
+    "patience": 40,
+    "seed": 42,
+    "cos_lr": true,
+    "close_mosaic": 10,
+    "hsv_h": 0.015,
+    "hsv_s": 0.7,
+    "hsv_v": 0.4,
+    "degrees": 10.0,
+    "translate": 0.1,
+    "scale": 0.5,
+    "shear": 3.0,
+    "fliplr": 0.5,
+    "mosaic": 1.0,
+    "mixup": 0.15,
+    "project": "c:\\Users\\istd.magang125\\OneDrive - TMMIN\\Documents\\cctv-insight\\ai\\research\\runs\\detect",
+    "name": "smartphone_yolo26m",
+    "exist_ok": true
+  },
+  "eval_cfg": {
+    "conf": 0.25,
+    "imgsz": 640,
+    "split": "val"
+  },
+  "device": "cuda",
+  "metrics": {
+    "mAP50": 0.9132070211749609,
+    "mAP50-95": 0.651244552048501,
+    "precision": 0.9159363051377606,
+    "recall": 0.9134199134199135
+  },
+  "speed_ms": {
+    "total": 18.091687451362237,
+    "fps": 55.27400374831833
+  }
+}

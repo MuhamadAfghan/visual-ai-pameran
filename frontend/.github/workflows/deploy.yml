@@ -1,0 +1,36 @@
+name: Deploy Frontend
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+            cd ${{ secrets.VPS_DEPLOY_PATH }}
+
+            echo "==> Pulling latest frontend..."
+            cd frontend
+            git pull origin main
+            cd ..
+
+            echo "==> Rebuilding frontend..."
+            docker compose build --no-cache frontend
+
+            echo "==> Restarting frontend container..."
+            docker compose up -d --no-deps frontend
+
+            echo "==> Cleaning up old images..."
+            docker image prune -f
+
+            echo "==> Deploy frontend done."

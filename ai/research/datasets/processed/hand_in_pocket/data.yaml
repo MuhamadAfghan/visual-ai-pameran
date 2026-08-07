@@ -1,0 +1,8 @@
+path: C:\Users\istd.magang125\OneDrive - TMMIN\Documents\cctv-insight\ai\research\datasets\processed\hand_in_pocket
+train: train/images
+val: valid/images
+test: test/images
+nc: 2
+names:
+- hand_in_pocket
+- no_hand_in_pocket

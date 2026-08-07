@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cctv-insight-ai"
+version = "0.1.0"
+description = "AI workspace for CCTV Insight"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "pydantic>=2.8.0",
+  "numpy>=1.26.0",
+  "ultralytics>=8.2.0",
+  "opencv-python>=4.8.0",
+  "roboflow>=1.1.49",
+  "grpcio>=1.62.0",
+  "grpcio-tools>=1.62.0",
+  "protobuf>=4.25.0"
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["cctv_insight_ai*", "ai*"]

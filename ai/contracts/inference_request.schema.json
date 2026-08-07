@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cctv-insight.local/contracts/inference_request.schema.json",
+  "title": "InferenceRequest",
+  "type": "object",
+  "required": ["camera_id", "frame_id", "timestamp_utc"],
+  "properties": {
+    "camera_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "frame_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "timestamp_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "image_uri": {
+      "type": "string",
+      "description": "Absolute path or URL accessible by AI service"
+    },
+    "image_base64": {
+      "type": "string",
+      "description": "Optional raw image payload when URI is not used"
+    },
+    "selected_checks": {
+      "type": "array",
+      "description": "Checklist detection selected by user in frontend. May be empty when no inference checks are needed.",
+      "items": {
+        "type": "string",
+        "enum": [
+          "person_count",
+          "mask_count",
+          "helmet_count",
+          "vest_count",
+          "goggles_count",
+          "gloves_count",
+          "ladder_count",
+          "safety_cone_count",
+          "fall_detected_count",
+          "red_zone_count",
+          "hand_in_pocket_count",
+          "holding_phone_count",
+          "handrail_count"
+        ]
+      },
+      "minItems": 0,
+      "uniqueItems": true
+    },
+    "roi_polygon": {
+      "type": "array",
+      "description": "Polygon red zone dalam koordinat ternormalisasi [0,1] relatif ke frame. Dipakai check red_zone_count (green lane detection).",
+      "items": {
+        "type": "object",
+        "required": ["x", "y"],
+        "properties": {
+          "x": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+          "y": { "type": "number", "minimum": 0.0, "maximum": 1.0 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "stairs_zone": {
+      "type": "array",
+      "description": "Polygon area tangga (ternormalisasi [0,1]). Dipakai check handrail_count.",
+      "items": {
+        "type": "object",
+        "required": ["x", "y"],
+        "properties": {
+          "x": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+          "y": { "type": "number", "minimum": 0.0, "maximum": 1.0 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "handrail_lines": {
+      "type": "array",
+      "description": "Satu/lebih garis handrail (rail bisa di banyak sisi). Tiap garis = array titik ternormalisasi [0,1]. Dipakai check handrail_count.",
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["x", "y"],
+          "properties": {
+            "x": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+            "y": { "type": "number", "minimum": 0.0, "maximum": 1.0 }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "thresholds": {
+      "type": "object",
+      "properties": {
+        "conf": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "iou": { "type": "number", "minimum": 0.0, "maximum": 1.0 }
+      },
+      "additionalProperties": false
+    },
+    "rules": {
+      "type": "object",
+      "description": "Violation evaluation rules supplied by backend. Backend is authoritative source.",
+      "properties": {
+        "crowd_threshold": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Trigger crowd_exceeded violation when person_count > this value."
+        }
+      },
+      "additionalProperties": false
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "anyOf": [
+    { "required": ["image_uri"] },
+    { "required": ["image_base64"] }
+  ],
+  "additionalProperties": false
+}

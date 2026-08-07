@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 1
+names: ['hand_phone']
+
+roboflow:
+  workspace: data-annotation-pwjtq
+  project: detect-hand-holding-phone
+  version: 2
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/data-annotation-pwjtq/detect-hand-holding-phone/dataset/2

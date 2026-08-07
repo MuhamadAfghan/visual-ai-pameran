@@ -1,0 +1,35 @@
+# Contoh konfigurasi training. Notebook biasanya pakai variabel langsung,
+# tapi file ini bisa dipakai sebagai referensi atau dipasangkan dengan
+# script training mandiri di scripts/.
+#
+# Use-case di sini = nama folder di research/notebooks/<usecase>/ dan key di
+# MODEL_REGISTRY (lihat src/cctv_insight_ai/models/registry.py).
+experiment:
+  name: helmet_and_vest_baseline
+  use_case: helmet_and_vest          # match dengan model_key di registry
+  seed: 42
+
+dataset:
+  # Path relatif dari ai/. Lihat research/datasets/processed/ untuk daftar lengkap.
+  root: research/datasets/processed/helmet_and_vest
+  data_yaml: research/datasets/processed/helmet_and_vest/data.yaml
+  classes:
+    - helmet
+    - no_helmet
+    - no_vest
+    - person
+    - vest
+
+training:
+  base_weights: yolo26m              # match dengan key base di MODEL_REGISTRY
+  epochs: 6
+  image_size: 640
+  batch_size: 8
+  optimizer: adamw
+  learning_rate: 0.001
+
+output:
+  # Hasil training masuk ke research/runs/detect/<run_name>/. Pakai prefix
+  # konsisten supaya `find_latest_run(prefix)` di notebook bisa pick up.
+  run_name_prefix: helmet_and_vest_yolo26m
+  save_best_only: true

@@ -1,0 +1,64 @@
+[
+  {
+    "task": "face_mask",
+    "model": "single (face_mask_yolo26m)",
+    "metric_type": "detection",
+    "mAP50": 0.838900638253286,
+    "mAP50-95": 0.39294010960136344,
+    "precision": 0.8604234581091905,
+    "recall": 0.8492406129561715,
+    "fps": 97.63158529080371
+  },
+  {
+    "task": "face_mask",
+    "model": "multitask (multitask_yolo26m)",
+    "metric_type": "detection",
+    "mAP50": 0.7590052766179207,
+    "mAP50-95": 0.354501366860201,
+    "precision": 0.80580641669753,
+    "recall": 0.7878990021224493,
+    "fps": 92.03013978972129
+  },
+  {
+    "task": "people_counting",
+    "model": "single (people_counting_yolo26m)",
+    "metric_type": "counting",
+    "samples": 500,
+    "mae": 1.768,
+    "rmse": 8.744369617073605,
+    "exact_match": 0.636,
+    "within_1": 0.834,
+    "bias": -0.756
+  },
+  {
+    "task": "people_counting",
+    "model": "multitask (multitask_yolo26m)",
+    "metric_type": "counting",
+    "samples": 500,
+    "mae": 1.35,
+    "rmse": 6.603786792439623,
+    "exact_match": 0.674,
+    "within_1": 0.85,
+    "bias": -0.73
+  },
+  {
+    "task": "helmet_and_vest",
+    "model": "single (helmet_and_vest_yolo26m)",
+    "metric_type": "detection",
+    "mAP50": 0.7615829505817324,
+    "mAP50-95": 0.4471579387140444,
+    "precision": 0.8741308513491802,
+    "recall": 0.7790643272992588,
+    "fps": 55.283445892325446
+  },
+  {
+    "task": "ppe_compliance",
+    "model": "single (ppe_compliance_yolo26m)",
+    "metric_type": "detection",
+    "mAP50": 0.6784039170098257,
+    "mAP50-95": 0.42972794590665636,
+    "precision": 0.7138323070971081,
+    "recall": 0.7690466068024829,
+    "fps": 61.89133503099995
+  }
+]

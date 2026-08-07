@@ -1,0 +1,59 @@
+{
+  "model_key": "people_counting",
+  "base_weight": "C:\\Users\\istd.magang125\\OneDrive - TMMIN\\Documents\\cctv-insight\\ai\\models\\yolo26m.pt",
+  "run_dir": "C:\\Users\\istd.magang125\\OneDrive - TMMIN\\Documents\\cctv-insight\\ai\\research\\runs\\detect\\people_counting_yolo26m",
+  "best_pt": "C:\\Users\\istd.magang125\\OneDrive - TMMIN\\Documents\\cctv-insight\\ai\\research\\runs\\detect\\people_counting_yolo26m\\weights\\best.pt",
+  "data_yaml": "C:\\Users\\istd.magang125\\OneDrive - TMMIN\\Documents\\cctv-insight\\ai\\research\\datasets\\processed\\people_counting_single_class\\data.yaml",
+  "class_names": [
+    "person"
+  ],
+  "seed": 42,
+  "train_cfg": {
+    "epochs": 50,
+    "imgsz": 640,
+    "batch": 8,
+    "workers": 4,
+    "patience": 20,
+    "seed": 42,
+    "project": "C:\\Users\\istd.magang125\\OneDrive - TMMIN\\Documents\\cctv-insight\\ai\\research\\runs\\detect",
+    "name": "people_counting_yolo26m"
+  },
+  "eval_cfg": {
+    "conf": 0.25,
+    "imgsz": 640,
+    "max_images": 500,
+    "splits": [
+      "test",
+      "valid"
+    ]
+  },
+  "device": "cuda",
+  "metrics": {
+    "samples": 500,
+    "mae": 1.768,
+    "rmse": 8.744369617073605,
+    "exact_match_accuracy": 0.636,
+    "within_1_count_accuracy": 0.834,
+    "bias": -0.756
+  },
+  "detection_eval": {
+    "eval_cfg": {
+      "conf": 0.25,
+      "imgsz": 640,
+      "split": "val"
+    },
+    "metrics": {
+      "mAP50": 0.6967847450798523,
+      "mAP50-95": 0.49164103960401323,
+      "precision": 0.8124443455031166,
+      "recall": 0.7287340255591054
+    },
+    "speed_ms": {
+      "preprocess": 1.2910503848679715,
+      "inference": 16.986778186456124,
+      "postprocess": 0.31020487594944834,
+      "total": 18.588033447273546,
+      "fps": 53.79805253937059
+    }
+  }
+}

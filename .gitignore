@@ -1,0 +1,43 @@
+# Node
+node_modules/
+dist/
+npm-debug.log*
+tsconfig.tsbuildinfo
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+build/
+*.egg-info/
+
+# Model weights
+*.pt
+*.pth
+*.onnx
+*.engine
+*.trt
+
+# Env files
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Backend-web local storage
+backend-web/storage/
+backend-web/temp/

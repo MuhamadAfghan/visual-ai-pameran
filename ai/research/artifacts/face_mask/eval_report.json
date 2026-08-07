@@ -1,0 +1,39 @@
+{
+  "model_key": "face_mask",
+  "base_weight": "C:\\Users\\istd.magang125\\OneDrive - TMMIN\\Documents\\cctv-insight\\ai\\models\\yolo26m.pt",
+  "run_dir": "C:\\Users\\istd.magang125\\OneDrive - TMMIN\\Documents\\cctv-insight\\ai\\research\\runs\\detect\\face_mask_yolo26m",
+  "best_pt": "C:\\Users\\istd.magang125\\OneDrive - TMMIN\\Documents\\cctv-insight\\ai\\research\\runs\\detect\\face_mask_yolo26m\\weights\\best.pt",
+  "data_yaml": "C:\\Users\\istd.magang125\\OneDrive - TMMIN\\Documents\\cctv-insight\\ai\\research\\datasets\\interim\\face_mask_cctv_split\\data.yaml",
+  "class_names": [
+    "mask",
+    "no_mask",
+    "improper_mask"
+  ],
+  "seed": 42,
+  "train_cfg": {
+    "epochs": 50,
+    "imgsz": 640,
+    "batch": 16,
+    "workers": 4,
+    "patience": 20
+  },
+  "eval_cfg": {
+    "conf": 0.25,
+    "imgsz": 640
+  },
+  "device": "cuda",
+  "variant": "yolo26m",
+  "metrics": {
+    "mAP50": 0.838900638253286,
+    "mAP50-95": 0.39294010960136344,
+    "precision": 0.8604234581091905,
+    "recall": 0.8492406129561715
+  },
+  "speed_ms": {
+    "preprocess": 0.594743186163462,
+    "inference": 9.516786365896802,
+    "postprocess": 0.13105738352433863,
+    "total": 10.242586935584603,
+    "fps": 97.63158529080371
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "model": "c:\\Users\\istd.magang125\\Documents\\cctv-insight\\ai\\research\\runs\\detect\\multitask_yolo26m_v3\\weights\\best.pt",
+  "run_dir": "c:\\Users\\istd.magang125\\Documents\\cctv-insight\\ai\\research\\runs\\detect\\multitask_yolo26m_v3",
+  "face_mask": {
+    "mAP50-95": 0.2907945739930982,
+    "mAP50": 0.6641693255826621,
+    "precision": 0.7205266109843916,
+    "recall": 0.7319244114172611
+  },
+  "people_counting": {
+    "samples": 500,
+    "mae": 1.854,
+    "rmse": 8.852231357121209,
+    "exact_match": 0.546,
+    "within_1": 0.796,
+    "bias": -0.762
+  }
+}

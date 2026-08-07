@@ -1,0 +1,7 @@
+task,model,metric_type,mAP50,mAP50-95,precision,recall,fps,samples,mae,rmse,exact_match,within_1,bias
+face_mask,single (face_mask_yolo26m),detection,0.838900638253286,0.39294010960136344,0.8604234581091905,0.8492406129561715,97.63158529080371,,,,,,
+face_mask,multitask (multitask_yolo26m),detection,0.7590052766179207,0.354501366860201,0.80580641669753,0.7878990021224493,92.03013978972129,,,,,,
+people_counting,single (people_counting_yolo26m),counting,,,,,,500.0,1.768,8.744369617073605,0.636,0.834,-0.756
+people_counting,multitask (multitask_yolo26m),counting,,,,,,500.0,1.35,6.603786792439623,0.674,0.85,-0.73
+helmet_and_vest,single (helmet_and_vest_yolo26m),detection,0.7615829505817324,0.4471579387140444,0.8741308513491802,0.7790643272992588,55.283445892325446,,,,,,
+ppe_compliance,single (ppe_compliance_yolo26m),detection,0.6784039170098257,0.42972794590665636,0.7138323070971081,0.7690466068024829,61.89133503099995,,,,,,

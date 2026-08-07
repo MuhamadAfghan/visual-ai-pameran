@@ -1,0 +1,64 @@
+train: train/images
+val: valid/images
+test: test/images
+nc: 53
+names:
+- '0'
+- '1'
+- '2'
+- Bicycle
+- Bike
+- Car
+- Cyclist
+- Pedestrian
+- Pedestrians
+- Persona
+- Pessoa
+- Signboard
+- Stopper
+- aeroplane
+- bag
+- berdiri
+- bicycle
+- bird
+- boat
+- bottle
+- bus
+- car
+- cat
+- chair
+- cow
+- cyclist
+- dianzhuan
+- diningtable
+- dog
+- face
+- forklift
+- handbag
+- head
+- helmet
+- high
+- horse
+- jatuh
+- laptop
+- low
+- medium
+- motorbike
+- people
+- person
+- persons
+- pottedplant
+- refrigerator
+- sheep
+- sofa
+- teddy bear
+- train
+- tv
+- tvmonitor
+- vase
+roboflow:
+  workspace: leo-ueno
+  project: people-detection-o4rdr
+  version: 12
+  license: Private
+  url: https://universe.roboflow.com/leo-ueno/people-detection-o4rdr/dataset/12

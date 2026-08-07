@@ -1,0 +1,6 @@
+class,train,valid,test,total
+helmet,2116,232,195,2543
+no-helmet,94,11,24,129
+no-vest,741,90,61,892
+person,2362,241,214,2817
+vest,1073,141,129,1343

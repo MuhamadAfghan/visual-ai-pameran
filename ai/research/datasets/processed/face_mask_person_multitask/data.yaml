@@ -1,0 +1,10 @@
+path: C:\Users\istd.magang125\OneDrive - TMMIN\Documents\cctv-insight\ai\research\datasets\processed\face_mask_person_multitask
+train: train/images
+val: valid/images
+test: test/images
+nc: 4
+names:
+- improper_mask
+- mask
+- no_mask
+- person

@@ -1,0 +1,29 @@
+# Contoh konfigurasi runtime untuk service inference (FastAPI).
+# Field di sini bersifat referensi — service utama baca AI_DEVICE dari env
+# (lihat src/cctv_insight_ai/utils/device.py).
+service:
+  host: 0.0.0.0
+  port: 8090
+
+runtime:
+  device: auto                       # auto | cpu | cuda
+  batch_size: 1
+
+# Default thresholds yang dipakai kalau request tidak kirim `thresholds`.
+# Lihat src/cctv_insight_ai/service/schemas.py: InferenceThresholds.
+thresholds:
+  conf: 0.25
+  iou: 0.45
+
+# Daftar check yang siap dijalankan service. Sumber otoritatif: CHECK_DEFINITIONS
+# di src/cctv_insight_ai/models/registry.py — file ini hanya referensi.
+enabled_checks:
+  - person_count
+  - mask_count
+  - helmet_count
+  - vest_count
+  - goggles_count
+  - gloves_count
+  - ladder_count
+  - safety_cone_count
+  - fall_detected_count

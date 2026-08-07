@@ -1,0 +1,11 @@
+{
+  "train_images": 13889,
+  "train_people": 12667,
+  "train_face": 1222,
+  "valid_images": 1519,
+  "valid_people": 1170,
+  "valid_face": 349,
+  "test_images": 892,
+  "test_face": 176,
+  "test_people": 716
+}

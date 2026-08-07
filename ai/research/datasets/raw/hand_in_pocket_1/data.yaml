@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 2
+names: ['hand_in_pocket', 'not_hand_in_pocket']
+
+roboflow:
+  workspace: amar-agnihotri
+  project: hand-in-pocket-detection
+  version: 6
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/amar-agnihotri/hand-in-pocket-detection/dataset/6

@@ -1,0 +1,134 @@
+services:
+
+  # ── Infrastructure ──────────────────────────────────────────
+  mongodb:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: cctv_detector
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Frontend SPA ────────────────────────────────────────────
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      backend-web:
+        condition: service_healthy
+
+  # ── AI inference service ────────────────────────────────────
+  ai:
+    build: ./ai
+    restart: unless-stopped
+    ports:
+      - "50051:50051"
+    env_file: ./ai/.env
+    volumes:
+      - ai_models:/app/models
+    healthcheck:
+      test: ["CMD", "python", "-c", "import grpc; ch=grpc.insecure_channel('localhost:50051'); grpc.channel_ready_future(ch).result(timeout=3)"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  # ── Backend API server ──────────────────────────────────────
+  backend-web:
+    build: ./backend-web
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file: ./backend-web/.env
+    environment:
+      MONGODB_URI: mongodb://mongodb:27017/cctv_detector
+      REDIS_URL: redis://redis:6379
+      AI_GRPC_TARGET: ai:50051
+      STORAGE_BASE_URL: http://localhost:8080/storage
+    volumes:
+      - snapshot_storage:/app/storage
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ── BullMQ workers ──────────────────────────────────────────
+  snapshot-worker:
+    build: ./backend-web
+    command: node dist/workers/snapshotWorker.js
+    restart: unless-stopped
+    env_file: ./backend-web/.env
+    environment:
+      MONGODB_URI: mongodb://mongodb:27017/cctv_detector
+      REDIS_URL: redis://redis:6379
+      AI_GRPC_TARGET: ai:50051
+    volumes:
+      - snapshot_storage:/app/storage
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ai:
+        condition: service_healthy
+
+  notification-worker:
+    build: ./backend-web
+    command: node dist/workers/notificationWorker.js
+    restart: unless-stopped
+    env_file: ./backend-web/.env
+    environment:
+      MONGODB_URI: mongodb://mongodb:27017/cctv_detector
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  cleanup-worker:
+    build: ./backend-web
+    command: node dist/workers/cleanupWorker.js
+    restart: unless-stopped
+    env_file: ./backend-web/.env
+    environment:
+      MONGODB_URI: mongodb://mongodb:27017/cctv_detector
+      REDIS_URL: redis://redis:6379
+    volumes:
+      - snapshot_storage:/app/storage
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  mongo_data:
+  redis_data:
+  snapshot_storage:
+  ai_models:

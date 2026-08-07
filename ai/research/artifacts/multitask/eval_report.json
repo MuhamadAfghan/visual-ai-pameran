@@ -1,0 +1,75 @@
+{
+  "model_key": "multitask",
+  "base_weight": "C:\\Users\\istd.magang125\\OneDrive - TMMIN\\Documents\\cctv-insight\\ai\\models\\yolo26m.pt",
+  "run_dir": "C:\\Users\\istd.magang125\\OneDrive - TMMIN\\Documents\\cctv-insight\\ai\\research\\runs\\detect\\multitask_yolo26m",
+  "best_pt": "C:\\Users\\istd.magang125\\OneDrive - TMMIN\\Documents\\cctv-insight\\ai\\research\\runs\\detect\\multitask_yolo26m\\weights\\best.pt",
+  "data_yaml": "C:\\Users\\istd.magang125\\OneDrive - TMMIN\\Documents\\cctv-insight\\ai\\research\\datasets\\processed\\face_mask_person_multitask\\data.yaml",
+  "class_names": [
+    "improper_mask",
+    "mask",
+    "no_mask",
+    "person"
+  ],
+  "seed": 42,
+  "train_cfg": {
+    "epochs": 50,
+    "imgsz": 640,
+    "batch": 8,
+    "workers": 4,
+    "patience": 20,
+    "seed": 42,
+    "project": "C:\\Users\\istd.magang125\\OneDrive - TMMIN\\Documents\\cctv-insight\\ai\\research\\runs\\detect",
+    "name": "multitask_yolo26m"
+  },
+  "eval_cfg": {
+    "face_mask": {
+      "conf": 0.25,
+      "imgsz": 640,
+      "data_yaml": "C:\\Users\\istd.magang125\\OneDrive - TMMIN\\Documents\\cctv-insight\\ai\\research\\datasets\\interim\\face_mask_cctv_split\\data.yaml"
+    },
+    "people_counting": {
+      "conf": 0.25,
+      "imgsz": 640,
+      "max_images": 500,
+      "splits": [
+        "test",
+        "valid"
+      ],
+      "data_dir": "C:\\Users\\istd.magang125\\OneDrive - TMMIN\\Documents\\cctv-insight\\ai\\research\\datasets\\raw\\people_counting",
+      "person_gt_class_ids": [
+        7,
+        8,
+        9,
+        10,
+        41,
+        42,
+        43
+      ],
+      "person_pred_class_id": 3
+    }
+  },
+  "device": "cuda",
+  "metrics": {
+    "face_mask": {
+      "mAP50": 0.7590052766179207,
+      "mAP50-95": 0.354501366860201,
+      "precision": 0.80580641669753,
+      "recall": 0.7878990021224493
+    },
+    "people_counting": {
+      "samples": 500,
+      "mae": 1.35,
+      "rmse": 6.603786792439623,
+      "exact_match_accuracy": 0.674,
+      "within_1_count_accuracy": 0.85,
+      "bias": -0.73
+    }
+  },
+  "speed_ms": {
+    "preprocess": 0.8202366764226229,
+    "inference": 9.540898567404168,
+    "postprocess": 0.5048702005296946,
+    "total": 10.866005444356485,
+    "fps": 92.03013978972129
+  }
+}

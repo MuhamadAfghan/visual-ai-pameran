@@ -1,0 +1,58 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# Model weights (downloaded or trained — never commit)
+*.pt
+*.pth
+*.onnx
+*.engine
+*.trt
+
+# Heavy data — ignore image/label folders anywhere in the tree.
+# The dataset folder itself stays tracked so data.yaml, README, split_meta.json are versioned.
+**/images/
+**/labels/
+**/*.cache
+
+# Training runs (large, fully reproducible from notebooks/scripts)
+research/runs/
+
+# Misc local-only outputs
+data/
+checkpoints/
+outputs/
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# LLM local config
+.claude

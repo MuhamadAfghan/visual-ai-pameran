@@ -1,0 +1,10 @@
+path: C:\Users\istd.magang125\Documents\cctv-insight\ai\research\datasets\processed\shared_backbone_colabeled
+train: train/images
+val: valid/images
+test: test/images
+nc: 4
+names:
+- improper_mask
+- mask
+- no_mask
+- person

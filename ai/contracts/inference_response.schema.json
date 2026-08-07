@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cctv-insight.local/contracts/inference_response.schema.json",
+  "title": "InferenceResponse",
+  "type": "object",
+  "required": [
+    "camera_id",
+    "frame_id",
+    "timestamp_utc",
+    "latency_ms",
+    "model_tasks_executed",
+    "detections",
+    "check_results",
+    "violations"
+  ],
+  "properties": {
+    "camera_id": { "type": "string" },
+    "frame_id": { "type": "string" },
+    "timestamp_utc": { "type": "string", "format": "date-time" },
+    "latency_ms": { "type": "number", "minimum": 0 },
+    "model_tasks_executed": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "detections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "confidence", "bbox"],
+        "properties": {
+          "id": { "type": "integer", "minimum": 0 },
+          "track_id": { "type": "integer", "minimum": 0 },
+          "label": { "type": "string" },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "bbox": {
+            "type": "array",
+            "items": { "type": "number" },
+            "minItems": 4,
+            "maxItems": 4,
+            "description": "[x1, y1, x2, y2]"
+          },
+          "keypoints": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": { "type": "number" },
+              "minItems": 3,
+              "maxItems": 3,
+              "description": "[x, y, score]"
+            }
+          },
+          "attributes": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "check_results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["check", "value", "confidence"],
+        "properties": {
+          "check": {
+            "type": "string",
+            "enum": [
+              "person_count",
+              "mask_count",
+              "helmet_count",
+              "vest_count",
+              "goggles_count",
+              "gloves_count",
+              "ladder_count",
+              "safety_cone_count",
+              "fall_detected_count",
+              "red_zone_count",
+              "hand_in_pocket_count",
+              "holding_phone_count",
+              "handrail_count"
+            ]
+          },
+          "value": { "type": "integer", "minimum": 0 },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "details": { "type": "object", "additionalProperties": true }
+        },
+        "additionalProperties": false
+      }
+    },
+    "violations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "severity", "score"],
+        "properties": {
+          "type": { "type": "string" },
+          "severity": { "type": "string", "enum": ["low", "medium", "high"] },
+          "score": { "type": "number", "minimum": 0, "maximum": 1 },
+          "track_id": { "type": "integer", "minimum": 0 },
+          "details": { "type": "object", "additionalProperties": true }
+        },
+        "additionalProperties": false
+      }
+    },
+    "meta": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

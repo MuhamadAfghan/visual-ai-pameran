@@ -1,0 +1,44 @@
+{
+  "model_key": "helmet_and_vest",
+  "base_weight": "C:\\Users\\istd.magang125\\OneDrive - TMMIN\\Documents\\cctv-insight\\ai\\models\\yolo26m.pt",
+  "run_dir": "C:\\Users\\istd.magang125\\OneDrive - TMMIN\\Documents\\cctv-insight\\ai\\research\\runs\\detect\\helmet_and_vest_yolo26m",
+  "best_pt": "C:\\Users\\istd.magang125\\OneDrive - TMMIN\\Documents\\cctv-insight\\ai\\research\\runs\\detect\\helmet_and_vest_yolo26m\\weights\\best.pt",
+  "data_yaml": "C:\\Users\\istd.magang125\\OneDrive - TMMIN\\Documents\\cctv-insight\\ai\\research\\datasets\\processed\\helmet_and_vest\\data.yaml",
+  "class_names": [
+    "helmet",
+    "no-helmet",
+    "no-vest",
+    "person",
+    "vest"
+  ],
+  "seed": 42,
+  "train_cfg": {
+    "epochs": 50,
+    "imgsz": 640,
+    "batch": 8,
+    "workers": 4,
+    "patience": 20,
+    "seed": 42,
+    "project": "C:\\Users\\istd.magang125\\OneDrive - TMMIN\\Documents\\cctv-insight\\ai\\research\\runs\\detect",
+    "name": "helmet_and_vest_yolo26m"
+  },
+  "eval_cfg": {
+    "conf": 0.25,
+    "imgsz": 640,
+    "split": "val"
+  },
+  "device": "cuda",
+  "metrics": {
+    "mAP50": 0.7615829505817324,
+    "mAP50-95": 0.4471579387140444,
+    "precision": 0.8741308513491802,
+    "recall": 0.7790643272992588
+  },
+  "speed_ms": {
+    "preprocess": 2.0195327731223087,
+    "inference": 15.845500840487528,
+    "postprocess": 0.22356386541999376,
+    "total": 18.08859747902983,
+    "fps": 55.283445892325446
+  }
+}

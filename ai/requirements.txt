@@ -1,0 +1,10 @@
+# Base runtime dependencies for AI workspace
+# Keep this file aligned with pyproject.toml for venv bootstrap.
+pydantic>=2.8.0
+numpy>=1.26.0
+ultralytics>=8.2.0
+opencv-python>=4.8.0
+roboflow>=1.1.49
+grpcio>=1.62.0
+grpcio-tools>=1.62.0
+protobuf>=4.25.0

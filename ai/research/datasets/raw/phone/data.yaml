@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 1
+names: ['smartphone - v1 2023-09-18 8-56pm']
+
+roboflow:
+  workspace: gabbi
+  project: smartphone-1ldzk
+  version: 1
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/gabbi/smartphone-1ldzk/dataset/1

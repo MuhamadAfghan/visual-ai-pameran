@@ -1,0 +1,123 @@
+syntax = "proto3";
+
+package ai.v1;
+
+service InferenceService {
+  rpc Infer(InferRequest) returns (InferResponse);
+  rpc Health(HealthRequest) returns (HealthResponse);
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  string status = 1;
+}
+
+message Thresholds {
+  double conf = 1;
+  double iou = 2;
+}
+
+// CameraRules: aturan evaluasi violation untuk sebuah kamera.
+// Backend adalah authoritative source — AI tidak menyimpan rules sendiri.
+// Kalau backend tidak kirim field ini (atau field-nya kosong), AI tidak akan
+// generate violation type yang relevan.
+message CameraRules {
+  // Threshold maksimum jumlah orang di frame. Kalau person_count > threshold,
+  // violation `crowd_exceeded` di-fire. Optional — kalau tidak diset, AI skip
+  // evaluasi crowd_exceeded.
+  optional int32 crowd_threshold = 1;
+}
+
+// Titik polygon dalam koordinat ternormalisasi [0,1] relatif ke frame
+// (x = kolom/width, y = baris/height). Resolution-independent supaya
+// polygon yang digambar di frontend tetap valid di resolusi inference berapa pun.
+message Point {
+  double x = 1;
+  double y = 2;
+}
+
+// Satu zona terlarang bernama. Dipakai di `red_zones` pada InferRequest.
+message RedZone {
+  string name   = 1;  // Label zona, mis. "Jalur Forklift A"
+  repeated Point points = 2;
+}
+
+// Satu polyline (urutan titik). Pembungkus karena proto tidak mendukung
+// repeated-of-repeated langsung. Dipakai utk handrail_lines (rail bisa banyak sisi).
+message Polyline {
+  repeated Point points = 1;
+}
+
+message InferRequest {
+  string camera_id = 1;
+  string frame_id = 2;
+  string timestamp_utc = 3;
+  string image_uri = 4;
+  string image_base64 = 5;
+  repeated string selected_checks = 6;
+  Thresholds thresholds = 7;
+  string metadata_json = 8;
+  CameraRules rules = 9;
+  // Deprecated — gunakan red_zones (field 11). Dipertahankan untuk compat.
+  repeated Point roi_polygon = 10;
+  // Polygon area tangga untuk check `handrail_count`. Normalized [0,1].
+  repeated Point stairs_zone = 11;
+  // Satu/lebih garis handrail (rail bisa di banyak sisi tangga). Orang di
+  // stairs_zone yang pergelangan tangannya jauh dari SEMUA garis = tidak memegang
+  // -> violation `handrail_violation`. Normalized [0,1].
+  repeated Polyline handrail_lines = 12;
+  // Daftar zona terlarang. Tiap zona punya nama + polygon [0,1].
+  // Kalau diisi dan check `red_zone_count` dipilih, AI cek titik kaki
+  // terhadap semua zona — satu zona pun diinjak = violation. Renumbered
+  // 11 -> 13 to coexist with stairs_zone/handrail_lines (see backend-web mirror).
+  repeated RedZone red_zones = 13;
+}
+
+message Keypoint {
+  double x = 1;
+  double y = 2;
+  double score = 3;
+}
+
+message Detection {
+  int32 id = 1;
+  optional int32 track_id = 2;
+  string label = 3;
+  double confidence = 4;
+  repeated double bbox = 5;
+  repeated Keypoint keypoints = 6;
+  map<string, string> attributes = 7;
+}
+
+message CheckDetails {
+  repeated string source_labels = 1;
+  map<string, int32> breakdown = 2;
+}
+
+message CheckResult {
+  string check = 1;
+  int32 value = 2;
+  double confidence = 3;
+  CheckDetails details = 4;
+}
+
+message Violation {
+  string type = 1;
+  string severity = 2;
+  double score = 3;
+  optional int32 track_id = 4;
+  string details_json = 5;
+}
+
+message InferResponse {
+  string camera_id = 1;
+  string frame_id = 2;
+  string timestamp_utc = 3;
+  double latency_ms = 4;
+  repeated string model_tasks_executed = 5;
+  repeated Detection detections = 6;
+  repeated CheckResult check_results = 7;
+  repeated Violation violations = 8;
+  string meta_json = 9;
+}

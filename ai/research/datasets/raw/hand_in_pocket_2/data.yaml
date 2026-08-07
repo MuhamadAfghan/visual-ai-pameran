@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 1
+names: ['hand_in_pocket']
+
+roboflow:
+  workspace: amar-agnihotri
+  project: segmentation-hand-in-pocket
+  version: 3
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/amar-agnihotri/segmentation-hand-in-pocket/dataset/3

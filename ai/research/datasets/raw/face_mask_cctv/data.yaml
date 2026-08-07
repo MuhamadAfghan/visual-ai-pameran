@@ -1,0 +1,14 @@
+train: train/images
+val: valid/images
+test: test/images
+nc: 3
+names:
+- Improper Mask
+- Mask
+- No Mask
+roboflow:
+  workspace: akmals-workspace-en7eb
+  project: akmals-workspace-en7eb
+  version: dataset
+  license: Private
+  url: https://app.roboflow.com/akmals-workspace-en7eb/akmals-workspace-en7eb/dataset

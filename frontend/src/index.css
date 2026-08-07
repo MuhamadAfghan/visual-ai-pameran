@@ -1,0 +1,88 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Light mode (default) ──────────────────────────────── */
+:root {
+  font-family: "Titillium Web", "Segoe UI", sans-serif;
+
+  --surface-base:     #F1F5F9;
+  --surface-panel:    #FFFFFF;
+  --surface-elevated: #F8FAFC;
+  --surface-border:   #E2E8F0;
+
+  --primary:    #D90429;
+  --primary-dim:#FCEDEF;
+  --primary-fg: #FFFFFF;
+
+  --content:           #0F172A;
+  --content-secondary: #475569;
+  --content-muted:     #94A3B8;
+}
+
+/* ── Dark mode ─────────────────────────────────────────── */
+.dark {
+  --surface-base:     #0D0F14;
+  --surface-panel:    #141720;
+  --surface-elevated: #1C2030;
+  --surface-border:   #2A2F42;
+
+  --primary:    #F03252;
+  --primary-dim:#3D0A12;
+  --primary-fg: #FFFFFF;
+
+  --content:           #F3F4F6;
+  --content-secondary: #9CA3AF;
+  --content-muted:     #6B7280;
+}
+
+/* ── Guest dark (monitoring) theme ─────────────────────── */
+/* Only activates when both .guest-mode AND .dark are present,
+   overriding the generic .dark vars with deeper monitoring palette. */
+.guest-mode.dark {
+  --surface-base:     #0a0a0f;
+  --surface-panel:    #13131a;
+  --surface-elevated: #1a1a24;
+  --surface-border:   #1e1e2e;
+
+  --primary:    #F03252;
+  --primary-dim:#3D0A12;
+  --primary-fg: #ffffff;
+
+  --content:           #e2e2e8;
+  --content-secondary: #8b8ba0;
+  --content-muted:     #4a4a60;
+}
+
+/* ── Guest light theme ─────────────────────────────────── */
+/* Must explicitly re-assert light vars because the app-wide dark toggle
+   (ui.store) puts `.dark` on <html>, and CSS variable inheritance would
+   otherwise leak those dark values into the guest subtree even when the
+   guest toggle says "light". */
+.guest-mode:not(.dark) {
+  --surface-base:     #F1F5F9;
+  --surface-panel:    #FFFFFF;
+  --surface-elevated: #F8FAFC;
+  --surface-border:   #E2E8F0;
+
+  --primary:    #D90429;
+  --primary-dim:#FCEDEF;
+  --primary-fg: #FFFFFF;
+
+  --content:           #0F172A;
+  --content-secondary: #475569;
+  --content-muted:     #94A3B8;
+}
+
+/* ── Base reset ─────────────────────────────────────────── */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: var(--surface-base);
+  color: var(--content);
+  transition: background-color 200ms ease, color 200ms ease;
+}

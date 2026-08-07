@@ -1,0 +1,14 @@
+# Minimal MediaMTX config untuk fake RTSP testing (dev only).
+# Pakai bareng dengan start-fake-rtsp.ps1.
+#
+# Mengizinkan publish ke path manapun tanpa auth.
+# JANGAN pakai config ini di production.
+
+logLevel: info
+
+# Default: setiap path baru otomatis terima publisher
+pathDefaults:
+  source: publisher
+
+paths:
+  all_others:
