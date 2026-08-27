@@ -140,7 +140,10 @@ export async function getEventSnapshotController(
     const data = await getEventById(id);
     if (!data) throw new HttpError(404, "Event not found");
 
-    const snapshotUrl = data.snapshotUrl as string | null;
+    // `original` = raw capture (frontend draws its own bbox overlay on top);
+    // default (annotated, bbox baked into the JPEG) is for email/export only.
+    const wantsOriginal = req.query.variant === "original";
+    const snapshotUrl = (wantsOriginal ? data.originalSnapshotUrl : data.snapshotUrl) as string | null;
     if (!snapshotUrl) throw new HttpError(404, "No snapshot available");
 
     const storageBase = env.STORAGE_BASE_URL;

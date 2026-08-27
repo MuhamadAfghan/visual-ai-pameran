@@ -92,6 +92,44 @@ Expected ending:
 scripts\dev\stop-fake-rtsp.ps1
 ```
 
+### Opsi C — Docker Compose (kalau stack sudah jalan via `docker compose up`)
+
+Kalau backend-web jalan sebagai container (bukan `npm run dev` native), `rtsp://localhost:8554/...`
+**tidak bisa** dipakai — dari dalam container, `localhost` merujuk ke container itu sendiri, bukan
+host MediaMTX. Repo ini sudah sediakan service `mediamtx` + `fake-rtsp-feed` di `docker-compose.yml`
+root, di belakang Compose profile `fake-rtsp` (tidak ikut nyala di `docker compose up` biasa):
+
+```powershell
+# Nyalakan MediaMTX + ffmpeg loop pusher (baca video dari backend-web/temp/)
+docker compose --profile fake-rtsp up -d --build
+
+# Seed Camera records — RTSP_FAKE_HOST=mediamtx wajib (bukan default "localhost")
+docker compose exec -e RTSP_FAKE_HOST=mediamtx backend-web node dist/scripts/seedDevCameras.js
+```
+
+> **Kalau backend-web sudah lama jalan saat seed ini dijalankan**, kamera baru akan tampil
+> `isActive: true` di DB tapi **live view-nya tetap "Monitoring nonaktif"**. Sebabnya:
+> `initCaptureHubs()` (`src/plugins/cameraStreamHub.ts`) cuma jalan **sekali saat boot**
+> (`server.ts`) untuk start monitoring hub semua kamera aktif — kamera yang baru di-insert
+> langsung ke Mongo lewat script (bukan lewat `POST /cameras`) tidak ikut ke-pickup. Field
+> `status`/`Online` di tile bisa tetap kelihatan "online" kalau kamu pernah test-connection
+> manual — itu field terpisah, bukan sinyal hub yang sebenarnya. Fix tanpa restart:
+> ```powershell
+> curl -X POST http://localhost:8090/api/v1/cameras/<id>/scheduler/start -H "Authorization: Bearer <token>"
+> ```
+> untuk tiap kamera baru (endpoint yang sama dipakai toggle "Aktifkan Scheduler" di form kamera),
+> atau restart `backend-web` supaya `initCaptureHubs()` jalan ulang dari awal.
+
+`fake-rtsp-feed` cuma push file yang benar-benar ada di `backend-web/temp/` (skip dengan warning
+kalau tidak ada, tidak fail) — cek `docker compose logs fake-rtsp-feed` untuk lihat stream mana
+yang hidup. Verifikasi manual dari dalam network Docker:
+
+```powershell
+docker compose exec backend-web sh -c "ffmpeg -rtsp_transport tcp -i rtsp://mediamtx:8554/<path> -vframes 1 -y /tmp/test.jpg"
+```
+
+Matikan: `docker compose --profile fake-rtsp down`.
+
 ### Prasyarat Service Lain
 
 `smokeRtspIntegration.ts` butuh service-service ini jalan **sebelum** test:

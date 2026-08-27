@@ -18,7 +18,7 @@ import {
   Video,
   type LucideIcon,
 } from "lucide-react";
-import toyotaLogo from "/assets/images/toyota_logo.png";
+import toyotaLogo from "/assets/images/lumi_logo.png";
 import { useUiStore } from "../store/ui.store";
 import { useAuth } from "../app/auth-provider";
 import { usePermission } from "../hooks/use-permission";
@@ -119,17 +119,12 @@ export function Sidebar() {
       >
       {/* Brand + toggle */}
       <div className="flex items-center flex-shrink-0 px-3 border-b h-14 border-surface-border">
-        <div className="flex items-center justify-center flex-shrink-0 w-8 h-8">
-          <img src={toyotaLogo} alt="Toyota" className="h-7 w-auto object-contain" />
-        </div>
-        <span
-          className={cn(
-            "ml-2.5 text-sm font-extrabold text-content truncate flex-1",
-            collapsed && "lg:hidden"
-          )}
-        >
-          CCTV AI Detector
-        </span>
+        <img
+          src={toyotaLogo}
+          alt="Lumicore"
+          className={cn("h-7 w-auto object-contain flex-shrink-0", collapsed && "lg:hidden")}
+        />
+        <span className={cn("flex-1", collapsed && "lg:hidden")} />
         {/* Collapse rail toggle — desktop only (mobile uses the hamburger + backdrop) */}
         <button
           onClick={toggle}

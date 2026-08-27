@@ -76,6 +76,68 @@ def test_out_of_order_frame_ignored():
     assert stale["attributes"]["walking"] == "false"
 
 
+# --- lost-track revival (brief occlusion / detector miss keeps identity) -----
+
+def test_track_revives_after_brief_dropout_nearby():
+    # gone for 5s (> live TTL 2s, < lost grace 8s), reappears close to where it
+    # was last seen — same person, should keep the same track_id.
+    store = CameraTrackStore()
+    d0 = _feed(store, "cam", (0, 0, 100, 100), ts=0.0)
+    d1 = _feed(store, "cam", (10, 5, 110, 105), ts=5.0)
+    assert d0["track_id"] == d1["track_id"]
+
+
+def test_track_does_not_revive_past_grace_window():
+    store = CameraTrackStore()
+    d0 = _feed(store, "cam", (0, 0, 100, 100), ts=0.0)
+    d1 = _feed(store, "cam", (10, 5, 110, 105), ts=20.0)  # well past lost grace (8s)
+    assert d0["track_id"] != d1["track_id"]
+
+
+def test_track_does_not_revive_if_reappears_far_away():
+    store = CameraTrackStore()
+    d0 = _feed(store, "cam", (0, 0, 100, 100), ts=0.0)
+    # gone only 3s (within grace), but reappears far away -> a different person,
+    # not a revival.
+    d1 = _feed(store, "cam", (900, 900, 1000, 1000), ts=3.0)
+    assert d0["track_id"] != d1["track_id"]
+
+
+def _feed_walking(store, cam, start_x, n=6, dx=20, dt=0.1, y=(0, 100)):
+    """Feed a box walking steadily rightward (dx/dt px/sec), building up
+    enough history for the tracker to estimate a velocity. Returns the last
+    fed detection (and its final ts)."""
+    last = None
+    ts = 0.0
+    for i in range(n):
+        x = start_x + i * dx
+        last = _feed(store, cam, (x, y[0], x + 100, y[1]), ts=ts)
+        ts += dt
+    return last, ts - dt
+
+
+def test_walking_track_revives_along_its_predicted_path():
+    # Person walks steadily (200 px/s), then drops out of detection for 3.5s.
+    # A naive "reappeared near last known spot" check would miss this — by the
+    # time they reappear, they've walked ~700px past where they were last
+    # seen. Predicting forward from their velocity should still catch it.
+    store = CameraTrackStore()
+    d0, last_ts = _feed_walking(store, "cam", start_x=0)
+    predicted_x = d0["bbox"][0] + 200 * 3.5  # same 200px/s, 3.5s gap
+    d1 = _feed(store, "cam", (predicted_x, 0, predicted_x + 100, 100), ts=last_ts + 3.5)
+    assert d0["track_id"] == d1["track_id"]
+
+
+def test_walking_track_does_not_revive_back_at_its_old_spot():
+    # Same walking track, same gap — but the new detection shows up back where
+    # the person started, not along their predicted path. That's not a
+    # revival of this track (they were headed the other way).
+    store = CameraTrackStore()
+    d0, last_ts = _feed_walking(store, "cam", start_x=0)
+    d1 = _feed(store, "cam", (0, 0, 100, 100), ts=last_ts + 3.5)
+    assert d0["track_id"] != d1["track_id"]
+
+
 def test_cameras_are_independent():
     store = CameraTrackStore()
     a = _feed(store, "cam-A", (0, 0, 100, 100), ts=0.0)

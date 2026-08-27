@@ -26,6 +26,11 @@ const systemSettingsSchema = new Schema(
     timezone: { type: String, default: "Asia/Jakarta" },
     storage: {
       maxSizeGB: { type: Number, default: 10 }
+    },
+    violationAlert: {
+      audioStyle: { type: String, enum: ["beep", "beep_speech"], default: "beep_speech" },
+      repeatMode: { type: String, enum: ["cooldown", "continuous"], default: "cooldown" },
+      repeatIntervalSeconds: { type: Number, default: 15 }
     }
   },
   { timestamps: true }

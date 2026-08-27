@@ -30,7 +30,7 @@ services:
     build: ./frontend
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "8080:80"
     depends_on:
       backend-web:
         condition: service_healthy
@@ -39,11 +39,31 @@ services:
   ai:
     build: ./ai
     restart: unless-stopped
+    # GPU passthrough. Without this, torch.cuda.is_available() is always False
+    # inside the container regardless of host GPU, and every YOLO inference
+    # runs on CPU.
+    #
+    # How the driver gets in differs per host:
+    #   dev box (Windows) — Docker Desktop WSL2 GPU-PV, confirmed active via
+    #                       `docker info`; nothing to install.
+    #   GB10 (Linux/arm64) — needs nvidia-container-toolkit installed and
+    #                        registered with the runtime on the host, else
+    #                        this reservation fails the container at start.
+    #                        Verify with:
+    #                          docker run --rm --gpus all nvidia/cuda:13.0.0-base-ubuntu24.04 nvidia-smi
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     ports:
       - "50051:50051"
     env_file: ./ai/.env
     volumes:
       - ai_models:/app/models
+      - ./ai/research:/app/research:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import grpc; ch=grpc.insecure_channel('localhost:50051'); grpc.channel_ready_future(ch).result(timeout=3)"]
       interval: 15s
@@ -58,15 +78,22 @@ services:
     build: ./backend-web
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "8090:8080"
     env_file: ./backend-web/.env
     environment:
       MONGODB_URI: mongodb://mongodb:27017/cctv_detector
       REDIS_URL: redis://redis:6379
       AI_GRPC_TARGET: ai:50051
+      # Consumed by the browser (evidence/snapshot <img> tags) — routed through
+      # nginx's /storage/ proxy (see frontend/nginx.conf) rather than
+      # backend-web's own published port, so this stays on the frontend's
+      # port regardless of whatever host port backend-web itself publishes to.
       STORAGE_BASE_URL: http://localhost:8080/storage
     volumes:
       - snapshot_storage:/app/storage
+      # Read-only: lets seedDevCameras.js (fake-rtsp profile) verify sample
+      # video files exist before creating Camera records for them.
+      - ./backend-web/temp:/app/temp:ro
     depends_on:
       mongodb:
         condition: service_healthy
@@ -78,6 +105,33 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+  # ── Fake RTSP camera streams (dev/demo only, opt-in) ─────────
+  # Loops sample video files (backend-web/temp/) as RTSP streams so cameras
+  # can be tested without real hardware. Not started by a plain `docker compose
+  # up` — bring it up with:
+  #   docker compose --profile fake-rtsp up -d --build
+  # Then seed matching Camera records:
+  #   docker compose exec -e RTSP_FAKE_HOST=mediamtx backend-web node dist/scripts/seedDevCameras.js
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    restart: unless-stopped
+    profiles: ["fake-rtsp"]
+    volumes:
+      - ./backend-web/scripts/dev/mediamtx-fake.yml:/mediamtx.yml:ro
+    ports:
+      - "8554:8554"
+
+  fake-rtsp-feed:
+    build:
+      context: ./backend-web/scripts/dev
+      dockerfile: Dockerfile.fake-rtsp
+    restart: unless-stopped
+    profiles: ["fake-rtsp"]
+    depends_on:
+      - mediamtx
+    volumes:
+      - ./backend-web/temp:/videos:ro
 
 volumes:
   mongo_data:

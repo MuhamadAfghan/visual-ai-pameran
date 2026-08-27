@@ -83,8 +83,7 @@ export function CameraTile({ camera }: Props) {
             autoPlay
             playsInline
             muted
-            className="w-full h-full object-cover"
-            style={{ transform: "scaleX(-1)" }}
+            className="w-full h-full object-cover" 
             onCanPlay={() => setDeviceVideoReady(true)}
           />
         ) : /* Snapshot polling (RTSP cameras) */ snapshotUrl && !imgError ? (

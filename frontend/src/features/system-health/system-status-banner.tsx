@@ -11,7 +11,7 @@ type Health = "operational" | "degraded" | "down";
 function deriveHealth(s: SystemSnapshot): { health: Health; downCount: number; warnCount: number } {
   const components = [s.components.mongodb.status, s.components.redis.status, s.components.aiGrpc.status];
   const downCount = components.filter((c) => c === "down").length;
-  const workerWarnCount = [s.workers.infer.status, s.workers.snapshot.status, s.workers.notification.status].filter(
+  const workerWarnCount = [s.workers.infer.status, s.workers.notification.status].filter(
     (w) => w === "no_workers"
   ).length;
 

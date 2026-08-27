@@ -11,7 +11,8 @@ export type PermissionAction =
   | "scheduler"
   | "acknowledge"
   | "false_positive"
-  | "toggle";
+  | "toggle"
+  | "capture";
 
 export type PermissionModule =
   | "cameras"

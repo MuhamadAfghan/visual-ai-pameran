@@ -25,6 +25,10 @@ export type LiveCameraStreamStatus =
 export type LiveCameraStreamState = {
   status: LiveCameraStreamStatus;
   seq: number;
+  /** Exact frame the AI analyzed for this result (base64 JPEG) — the live
+   *  view renders this directly instead of a separately-paced video feed, so
+   *  it and `detections` are always in sync. */
+  frame: string | null;
   width: number | null;
   height: number | null;
   detections: Detection[];
@@ -37,6 +41,7 @@ export type LiveCameraStreamState = {
 
 const EMPTY_RESULT = {
   seq: 0,
+  frame: null as string | null,
   width: null,
   height: null,
   detections: [] as Detection[],
@@ -84,10 +89,17 @@ export function useLiveCameraStream(
     setState(idleState());
 
     function applyResult(r: LiveStreamResult): void {
+      // Device-camera pushes fire in parallel now (see device-camera-provider),
+      // so results can arrive out of capture order — a slow request can settle
+      // after a later, faster one already displayed. seq is assigned at push
+      // arrival (not completion), so a stale/late result always has a seq <=
+      // what's already shown here; drop it instead of regressing the view.
+      if (r.seq <= lastSeqRef.current) return;
       lastSeqRef.current = r.seq;
       setState({
         status: "live",
         seq: r.seq,
+        frame: r.frame,
         width: r.width,
         height: r.height,
         detections: r.detections,

@@ -32,15 +32,30 @@ const DeviceCameraContext = createContext<DeviceCameraContextValue | undefined>(
 const LOG = "[DeviceCamera]";
 const RETRY_WHEN_NOT_READY_MS = 2_000;
 const CAMERA_LIST_REFRESH_MS = 60_000;
+// Even with no configured floor (minCaptureGapSeconds=0 → "as fast as
+// possible"), don't tick faster than this. Pushes now fire on a fixed
+// interval regardless of whether the previous one has responded yet, so
+// without a floor a 0-configured camera would fire as fast as the JS event
+// loop allows — far beyond what a webcam actually decodes new frames at,
+// just re-encoding near-duplicates and burning CPU/network for no benefit.
+const MIN_TICK_MS = 100;
+// Safety backpressure, not a normal-operation limit: if the AI service
+// stalls, in-flight pushes would otherwise pile up unboundedly in the tab
+// (each holding an encoded frame + pending promise) since nothing here waits
+// for a response anymore. High enough to never engage during normal parallel
+// operation — it only skips a tick once this many pushes are genuinely stuck.
+const MAX_IN_FLIGHT = 8;
 
 export function DeviceCameraProvider({ children }: PropsWithChildren) {
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const { canUpdate } = usePermission();
-  // Push-frame endpoint requires `cameras:update`. Without it the backend
-  // returns 403 on every push, spamming the system log. Only admin/super_admin
-  // (and custom roles with cameras:update) may operate the device-camera loop.
-  const canPushFrames = canUpdate("cameras");
+  const { can } = usePermission();
+  // Push-frame endpoint requires `cameras:capture` — a narrower permission than
+  // cameras:update (which also covers editing camera config/RTSP settings), so
+  // a viewer-tier account (including the guest session) can supply a device
+  // camera's webcam without gaining any camera-editing rights. Without it the
+  // backend returns 403 on every push, spamming the system log.
+  const canPushFrames = can("cameras", "capture");
 
   /*
    * Off-screen video for canvas capture.
@@ -48,9 +63,16 @@ export function DeviceCameraProvider({ children }: PropsWithChildren) {
    * keeping videoWidth=0 permanently. Off-screen + opacity:0 keeps decoding active.
    */
   const hiddenVideoRef = useRef<HTMLVideoElement>(null);
+  // Holds either the startup readiness-poll's setTimeout or the steady-state
+  // setInterval — clearTimeout/clearInterval are interchangeable on a timer
+  // ID in browsers, so one ref/clear function covers both phases.
   const captureTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const refreshTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pendingRef = useRef(false);
+  // Count of pushes currently in flight, not a single-slot gate — captures
+  // now fire on a fixed interval without waiting for the previous push's
+  // response, so more than one can be outstanding at once. Drives the
+  // exposed `capturePending` boolean and the MAX_IN_FLIGHT backpressure check.
+  const inFlightCountRef = useRef(0);
   const cameraIdRef = useRef<string | null>(null);
   const intervalSecRef = useRef<number>(0);
   const tickCountRef = useRef(0);
@@ -88,57 +110,70 @@ export function DeviceCameraProvider({ children }: PropsWithChildren) {
 
   // ── Capture loop ─────────────────────────────────────────────────────────────
 
-  const scheduleNextCapture = useCallback(
-    (delayMs: number) => {
-      clearCaptureTimer();
-      if (!cameraIdRef.current) return;
-      captureTimerRef.current = setTimeout(() => void doCapture(), delayMs);
-    },
+  // Startup-only: right after getUserMedia resolves, the hidden <video> may
+  // not have decoded its first frame yet. Poll quickly until it has —
+  // independent of the configured capture interval, which could be much
+  // longer — then hand off to the fixed-cadence steady-state loop below.
+  // Once ready, an active MediaStream's video doesn't regress to not-ready,
+  // so this phase only ever runs once per startCapture() call.
+  const waitForVideoReadyThenLoop = useCallback(() => {
+    if (!cameraIdRef.current) return;
+    const video = hiddenVideoRef.current;
+    const ready = video && video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0;
+    if (!ready) {
+      captureTimerRef.current = setTimeout(waitForVideoReadyThenLoop, RETRY_WHEN_NOT_READY_MS);
+      return;
+    }
+    const tickMs = Math.max(MIN_TICK_MS, intervalSecRef.current * 1_000);
+    captureTimerRef.current = setInterval(() => void doCapture(), tickMs);
+    // doCapture is a stable plain function defined inside the component (like
+    // startCapture/refreshDeviceCameraList above) — it only ever reads current
+    // ref values, so omitting it here doesn't risk a stale closure.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [clearCaptureTimer]
-  );
+  }, []);
+
+  const startCaptureLoop = useCallback(() => {
+    clearCaptureTimer();
+    if (!cameraIdRef.current) return;
+    waitForVideoReadyThenLoop();
+  }, [clearCaptureTimer, waitForVideoReadyThenLoop]);
 
   async function doCapture() {
     const cameraId = cameraIdRef.current;
     const video = hiddenVideoRef.current;
-    // Soft floor (minCaptureGapSeconds), not a fixed wait: the loop re-arms
-    // as soon as the previous push round-trip settles, only padding out to
-    // this floor if the caller configured one. 0 (the default) means no
-    // artificial delay at all — push as fast as capture+encode+upload+AI
-    // round-trip allows, same self-pacing principle as the RTSP monitoring
-    // hub's frame-arrival-driven loop.
-    const floorMs = intervalSecRef.current * 1_000;
-
     if (!cameraId || !video) return;
 
-    if (pendingRef.current) {
-      console.warn(`${LOG} previous capture still pending — retrying in ${RETRY_WHEN_NOT_READY_MS}ms`);
-      publishClientLog("warn", `Previous capture still pending → retry in ${RETRY_WHEN_NOT_READY_MS / 1000}s`, {
-        cameraId,
-        frame: tickCountRef.current
-      });
-      scheduleNextCapture(RETRY_WHEN_NOT_READY_MS);
-      return;
-    }
-
-    // ── Pre-flight: video not ready yet → quick retry instead of waiting full interval
+    // Defensive only — waitForVideoReadyThenLoop already guarantees the video
+    // is decoding before the steady-state interval ever starts calling this.
+    // No special reschedule on a miss: the regular interval retries next tick.
     if (video.readyState < 2 || video.videoWidth === 0 || video.videoHeight === 0) {
       skipCountRef.current += 1;
       console.warn(
-        `${LOG} video not ready (readyState=${video.readyState}, ${video.videoWidth}x${video.videoHeight}) — retry in ${RETRY_WHEN_NOT_READY_MS}ms`
+        `${LOG} video not ready (readyState=${video.readyState}, ${video.videoWidth}x${video.videoHeight}) — skipping this tick`
       );
-      publishClientLog("warn", `Video not ready → retry in ${RETRY_WHEN_NOT_READY_MS / 1000}s`, {
+      publishClientLog("warn", "Video not ready → skipping this tick", {
         cameraId,
         readyState: video.readyState,
         resolution: `${video.videoWidth}x${video.videoHeight}`,
         skipCount: skipCountRef.current
       });
-      scheduleNextCapture(RETRY_WHEN_NOT_READY_MS);
+      return;
+    }
+
+    // Backpressure, not normal-path throttling: fires in parallel on every
+    // tick regardless of whether earlier pushes have responded yet, so this
+    // only engages if pushes are genuinely piling up (AI service stalled).
+    if (inFlightCountRef.current >= MAX_IN_FLIGHT) {
+      console.warn(`${LOG} ${inFlightCountRef.current} pushes already in flight — skipping this tick`);
+      publishClientLog("warn", `Skipping tick — ${inFlightCountRef.current} pushes already in flight`, {
+        cameraId,
+        inFlight: inFlightCountRef.current
+      });
       return;
     }
 
     tickCountRef.current += 1;
-    pendingRef.current = true;
+    inFlightCountRef.current += 1;
     setCapturePending(true);
 
     const frameNum = tickCountRef.current;
@@ -186,32 +221,40 @@ export function DeviceCameraProvider({ children }: PropsWithChildren) {
         reason: msg
       });
     } finally {
-      pendingRef.current = false;
-      setCapturePending(false);
-      const elapsedSinceStart = performance.now() - startedAt;
-      scheduleNextCapture(Math.max(0, floorMs - elapsedSinceStart));
+      inFlightCountRef.current = Math.max(0, inFlightCountRef.current - 1);
+      setCapturePending(inFlightCountRef.current > 0);
+      // No reschedule here — the steady-state setInterval keeps ticking on
+      // its own fixed cadence regardless of how long this push took.
     }
   }
 
   // ── Public actions ───────────────────────────────────────────────────────────
 
   async function startCapture(cameraId: string, intervalSec: number) {
-    // Guard: user must have cameras:update to push frames, otherwise every tick → 403
+    // Guard: user must have cameras:capture to push frames, otherwise every tick → 403
     if (!canPushFrames) {
-      console.info(`${LOG} startCapture skipped — current role lacks cameras:update permission`);
+      console.info(`${LOG} startCapture skipped — current role lacks cameras:capture permission`);
       publishClientLog(
         "warn",
-        `Capture skipped → cameraId=${cameraId}: role tidak punya permission cameras:update`,
+        `Capture skipped → cameraId=${cameraId}: role tidak punya permission cameras:capture`,
         { cameraId, reason: "missing_permission" }
       );
       return;
     }
 
-    // Already running for this camera — just refresh interval value
+    // Already running for this camera — the steady-state timer is a fixed
+    // setInterval established once at its current tick rate, so a changed
+    // interval needs an actual restart to take effect, not just a ref update.
     if (cameraIdRef.current === cameraId && captureTimerRef.current !== null) {
-      intervalSecRef.current = intervalSec;
-      console.info(`${LOG} already capturing cameraId=${cameraId} (interval=${intervalSec}s) — no-op`);
-      publishClientLog("info", `Already capturing cameraId=${cameraId} interval=${intervalSec}s (no-op)`);
+      if (intervalSecRef.current !== intervalSec) {
+        intervalSecRef.current = intervalSec;
+        startCaptureLoop();
+        console.info(`${LOG} already capturing cameraId=${cameraId} — restarted at new interval=${intervalSec}s`);
+        publishClientLog("info", `Capture interval changed → cameraId=${cameraId} interval=${intervalSec}s`);
+      } else {
+        console.info(`${LOG} already capturing cameraId=${cameraId} (interval=${intervalSec}s) — no-op`);
+        publishClientLog("info", `Already capturing cameraId=${cameraId} interval=${intervalSec}s (no-op)`);
+      }
       return;
     }
 
@@ -244,8 +287,9 @@ export function DeviceCameraProvider({ children }: PropsWithChildren) {
         resolution
       });
 
-      // Kick off the loop — quick first attempt; doCapture will retry-on-not-ready
-      scheduleNextCapture(RETRY_WHEN_NOT_READY_MS);
+      // Kick off the loop — waits for the video to actually be decoding
+      // before starting the fixed-cadence steady-state interval.
+      startCaptureLoop();
     } catch (err) {
       const msg =
         err instanceof DOMException && err.name === "NotAllowedError"
@@ -279,7 +323,7 @@ export function DeviceCameraProvider({ children }: PropsWithChildren) {
     });
     setActiveCameraId(null);
     setLastCapture(null);
-    pendingRef.current = false;
+    inFlightCountRef.current = 0;
     setCapturePending(false);
     setError(null);
     if (hiddenVideoRef.current) hiddenVideoRef.current.srcObject = null;
@@ -334,9 +378,11 @@ export function DeviceCameraProvider({ children }: PropsWithChildren) {
 
   // ── Auto-start / auto-stop based on auth + permission ────────────────────────
   // The device-camera capture loop posts to /push-frame which requires
-  // `cameras:update`. Viewer / guest / pic accounts do not have it, so we must
-  // never start the loop for them — otherwise every interval tick produces a 403
-  // and floods the system log.
+  // `cameras:capture` (admin/viewer/pic all have it by default — see
+  // defaultPermissions.ts — so a guest/kiosk session can supply its own
+  // webcam too). Any role/custom permission set lacking it must never start
+  // the loop — otherwise every interval tick produces a 403 and floods the
+  // system log.
 
   useEffect(() => {
     if (!user || !canPushFrames) {
@@ -364,13 +410,19 @@ export function DeviceCameraProvider({ children }: PropsWithChildren) {
       } else {
         console.info(`${LOG} tab visible — resuming normal capture cadence`);
         publishClientLog("info", `Tab visible — resuming capture`, { cameraId: cameraIdRef.current });
-        // Force an immediate attempt when user returns to the tab
-        scheduleNextCapture(0);
+        // Bonus immediate capture on return — the regular interval keeps
+        // ticking on its own cadence regardless, this just avoids waiting out
+        // a full tick after a potentially-long tab-hidden gap.
+        void doCapture();
       }
     }
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
-  }, [scheduleNextCapture]);
+    // doCapture is a stable plain function defined inside the component (like
+    // startCapture/refreshDeviceCameraList above) — it only ever reads current
+    // ref values, so omitting it here doesn't risk a stale closure.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <DeviceCameraContext.Provider

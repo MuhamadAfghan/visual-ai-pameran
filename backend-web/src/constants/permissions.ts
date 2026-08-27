@@ -10,6 +10,10 @@ export const PERMISSIONS = {
   CAMERAS_STREAM:         "cameras:stream",
   CAMERAS_SNAPSHOT:       "cameras:snapshot",
   CAMERAS_SCHEDULER:      "cameras:scheduler",
+  // Push frames from a browser's own webcam (POST /push-frame) — deliberately
+  // separate from CAMERAS_UPDATE (camera CRUD/config) so a viewer-tier account
+  // can supply a device camera's video without gaining any editing rights.
+  CAMERAS_CAPTURE:        "cameras:capture",
 
   // ── Events ───────────────────────────────────────────────────────────────
   EVENTS_VIEW:            "events:view",

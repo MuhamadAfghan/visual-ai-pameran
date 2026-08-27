@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { X, ChevronLeft, ChevronRight, AlertTriangle } from "lucide-react";
 import { ConfidenceBadge } from "../../components/confidence-badge";
+import { detectionColor } from "../../components/snapshot-bbox";
 import { formatDate } from "../../utils/formatDate";
 import { cn } from "../../utils/cn";
 import { getEventConfidence, getEventCheckLabel, type DetectionEvent, type Detection, type RedZone, type EventStatus } from "../../types/event.types";
@@ -18,10 +19,6 @@ const statusConfig: Record<EventStatus, { label: string; className: string }> = 
   acknowledged: { label: "Diakui", className: "text-green-500" },
   false_positive: { label: "False Positive", className: "text-content-muted" }
 };
-
-function isViolationLabel(label: string): boolean {
-  return label.startsWith("no_") || label === "fall_detected";
-}
 
 function drawDetections(
   canvas: HTMLCanvasElement,
@@ -82,8 +79,7 @@ function drawDetections(
     const ry = oy + y1 * scale;
     const rw = (x2 - x1) * scale;
     const rh = (y2 - y1) * scale;
-    const inRedZone = det.attributes?.in_red_zone === "true";
-    const color = inRedZone || isViolationLabel(det.label) ? "#ef4444" : "#22c55e";
+    const color = detectionColor(det);
     const label = `${det.label} ${Math.round(det.confidence * 100)}%`;
 
     ctx.strokeStyle = color;
@@ -121,19 +117,21 @@ export function EventLightbox({ events, index, onClose, onChange }: Props) {
     return () => document.removeEventListener("keydown", onKey);
   }, [index, hasPrev, hasNext, onClose, onChange]);
 
+  const rawSnapshotUrl = event?.originalSnapshotUrl ?? event?.snapshotUrl;
+
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !event?.snapshotUrl) return;
+    if (!canvas || !rawSnapshotUrl) return;
 
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.onload = () => {
       canvas.width = canvas.offsetWidth;
       canvas.height = canvas.offsetHeight;
-      drawDetections(canvas, img, event.detections ?? [], event.redZones ?? []);
+      drawDetections(canvas, img, event?.detections ?? [], event?.redZones ?? []);
     };
-    img.src = event.snapshotUrl;
-  }, [event?.snapshotUrl, event?.detections, event?.redZones]);
+    img.src = rawSnapshotUrl;
+  }, [rawSnapshotUrl, event?.detections, event?.redZones]);
 
   if (!event || index === null) return null;
 
@@ -158,7 +156,7 @@ export function EventLightbox({ events, index, onClose, onChange }: Props) {
 
         {/* Image */}
         <div className="relative flex items-center justify-center bg-black aspect-video">
-          {event.snapshotUrl ? (
+          {rawSnapshotUrl ? (
             <canvas ref={canvasRef} className="w-full h-full" />
           ) : (
             <div className="text-center">

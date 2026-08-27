@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Mail, Database, Camera, Bell, Trash2, Send, Eye, EyeOff, HardDrive } from "lucide-react";
+import { Mail, Database, Camera, Bell, Trash2, Send, Eye, EyeOff, HardDrive, Volume2 } from "lucide-react";
 import { PageHeader } from "../../components/page-header";
 import {
   getSettings,
@@ -86,6 +86,11 @@ export function SettingsPage() {
   const [capture, setCapture] = useState({ defaultInterval: 30, defaultCooldown: 300 });
   const [notification, setNotification] = useState({ maxEmailsPerHour: 10, cooldownMinutes: 5 });
   const [storage, setStorage] = useState({ maxSizeGB: 10 });
+  const [violationAlert, setViolationAlert] = useState<{
+    audioStyle: "beep" | "beep_speech";
+    repeatMode: "cooldown" | "continuous";
+    repeatIntervalSeconds: number;
+  }>({ audioStyle: "beep_speech", repeatMode: "cooldown", repeatIntervalSeconds: 15 });
   const [showPass, setShowPass] = useState(false);
   const [testEmail, setTestEmail] = useState("");
   const [testingSmtp, setTestingSmtp] = useState(false);
@@ -120,6 +125,11 @@ export function SettingsPage() {
       cooldownMinutes: settings.notification?.cooldownMinutes ?? 5
     });
     setStorage({ maxSizeGB: settings.storage?.maxSizeGB ?? 10 });
+    setViolationAlert({
+      audioStyle: settings.violationAlert?.audioStyle ?? "beep_speech",
+      repeatMode: settings.violationAlert?.repeatMode ?? "cooldown",
+      repeatIntervalSeconds: settings.violationAlert?.repeatIntervalSeconds ?? 15
+    });
   }, [settings]);
 
   const saveMutation = useMutation({
@@ -137,7 +147,8 @@ export function SettingsPage() {
       retention,
       capture,
       notification,
-      storage
+      storage,
+      violationAlert
     };
     saveMutation.mutate(payload);
   }
@@ -382,6 +393,66 @@ export function SettingsPage() {
               }
             />
           </Field>
+        </div>
+      </Section>
+
+      {/* Violation audio alert */}
+      <Section
+        icon={Volume2}
+        title="Alert Suara Pelanggaran"
+        description="Gaya dan frekuensi alert suara saat pelanggaran terdeteksi (berlaku untuk semua user)"
+      >
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Gaya Audio">
+            <select
+              className={inp}
+              value={violationAlert.audioStyle}
+              onChange={(e) =>
+                setViolationAlert((s) => ({
+                  ...s,
+                  audioStyle: e.target.value as "beep" | "beep_speech"
+                }))
+              }
+            >
+              <option value="beep_speech">Beep + Suara (TTS)</option>
+              <option value="beep">Beep saja</option>
+            </select>
+          </Field>
+          <Field label="Pengulangan">
+            <select
+              className={inp}
+              value={violationAlert.repeatMode}
+              onChange={(e) =>
+                setViolationAlert((s) => ({
+                  ...s,
+                  repeatMode: e.target.value as "cooldown" | "continuous"
+                }))
+              }
+            >
+              <option value="cooldown">Sesuai cooldown period kamera</option>
+              <option value="continuous">Ulangi selama pelanggaran berlangsung</option>
+            </select>
+          </Field>
+          {violationAlert.repeatMode === "continuous" && (
+            <Field
+              label="Interval Pengulangan (detik)"
+              hint="Seberapa sering alert diulang selama pelanggaran masih terdeteksi"
+            >
+              <input
+                type="number"
+                min={5}
+                max={300}
+                className={inp}
+                value={violationAlert.repeatIntervalSeconds}
+                onChange={(e) =>
+                  setViolationAlert((s) => ({
+                    ...s,
+                    repeatIntervalSeconds: Number(e.target.value)
+                  }))
+                }
+              />
+            </Field>
+          )}
         </div>
       </Section>
 

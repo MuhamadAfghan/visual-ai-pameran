@@ -26,7 +26,11 @@ const aiModelSchema = new Schema(
     defaultChecks: [{ type: String, enum: SELECTED_CHECKS }],
     defaultConfThreshold: { type: Number, default: 0.25, min: 0, max: 1 },
     version: { type: String, trim: true, default: "1.0.0" },
-    isActive: { type: Boolean, default: true }
+    isActive: { type: Boolean, default: true },
+    // Marks the single "free pick" catalog entry the mapping form unlocks
+    // selectedChecks for. System-managed (seedAiModels.ts) — not exposed on
+    // the admin AiModel form, same as SELECTED_CHECKS above.
+    isCustom: { type: Boolean, default: false }
   },
   { timestamps: true }
 );

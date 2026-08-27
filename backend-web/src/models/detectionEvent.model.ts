@@ -36,6 +36,18 @@ const detectionEventSchema = new Schema(
     // true if at least one checkResult has isViolation: true — kept at top level for fast querying
     isViolation: { type: Boolean, required: true },
 
+    // AI-assigned track_id of every individual violator captured in this event
+    // (deduped). Used to key the capture cooldown per-person instead of per
+    // camera+mapping — see isViolationDebounced's replacement in
+    // framePipeline.service.ts. Empty when the AI service couldn't identify
+    // individual violators for any check in this event.
+    violatingTrackIds: { type: [Number], default: [] },
+    // true if this event includes at least one violation the AI service
+    // couldn't attribute to a single tracked person (e.g. crowd_exceeded, a
+    // whole-zone metric) — those fall back to the old camera+mapping-wide
+    // cooldown window.
+    hasUntrackedViolation: { type: Boolean, default: false },
+
     // All detected objects from the inference (shared across checks)
     detections: [
       {
@@ -77,6 +89,10 @@ detectionEventSchema.index({ status: 1 });
 detectionEventSchema.index({ isViolation: 1, detectedAt: -1 });
 detectionEventSchema.index({ "checkResults.check": 1 });
 detectionEventSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+// Supports the per-violator cooldown lookup in framePipeline.service.ts
+// (getUndebouncedViolationInstances): recent events for this camera+mapping,
+// filtered by which track_ids they already cover.
+detectionEventSchema.index({ cameraId: 1, mappingId: 1, isViolation: 1, violatingTrackIds: 1, detectedAt: -1 });
 
 export type DetectionEventDocument = InferSchemaType<typeof detectionEventSchema>;
 export const DetectionEventModel = model("DetectionEvent", detectionEventSchema);

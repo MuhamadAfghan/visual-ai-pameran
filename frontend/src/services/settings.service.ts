@@ -24,7 +24,14 @@ export type SystemSettings = {
   storage?: {
     maxSizeGB: number;
   };
+  violationAlert: {
+    audioStyle: "beep" | "beep_speech";
+    repeatMode: "cooldown" | "continuous";
+    repeatIntervalSeconds: number;
+  };
 };
+
+export type ViolationAlertConfig = SystemSettings["violationAlert"];
 
 export type StorageStats = {
   usedBytes: number;
@@ -39,6 +46,7 @@ export type SettingsPayload = Partial<{
   capture: Partial<SystemSettings["capture"]>;
   notification: Partial<SystemSettings["notification"]>;
   storage: Partial<NonNullable<SystemSettings["storage"]>>;
+  violationAlert: Partial<SystemSettings["violationAlert"]>;
 }>;
 
 export async function getSettings(): Promise<SystemSettings> {
@@ -69,5 +77,14 @@ export async function runCleanup(): Promise<{ message: string; deleted: number }
 
 export async function getStorageStats(): Promise<StorageStats> {
   const res = await apiClient.get<{ success: boolean; data: StorageStats }>("/settings/storage/stats");
+  return unwrap(res);
+}
+
+// Accessible to every authenticated role (not just super_admin) — the audio-alert
+// feature runs app-wide, so it can't ride on the super_admin-only GET /settings.
+export async function getViolationAlertConfig(): Promise<ViolationAlertConfig> {
+  const res = await apiClient.get<{ success: boolean; data: ViolationAlertConfig }>(
+    "/settings/violation-alert"
+  );
   return unwrap(res);
 }

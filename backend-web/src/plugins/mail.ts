@@ -1,6 +1,8 @@
+import fs from "node:fs/promises";
 import nodemailer, { type Transporter } from "nodemailer";
 import { env } from "../config/env";
 import { getSettings, getDecryptedSmtpPass } from "../services/systemSettings.service";
+import { toLabel } from "../utils/violationLabels";
 
 type ResolvedSmtp = {
   host: string;
@@ -83,24 +85,6 @@ async function getTransporter(): Promise<{ tx: Transporter; from: string } | nul
 
   cached = { signature, tx, from: cfg.from };
   return { tx, from: cfg.from };
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function toLabel(check: string): string {
-  const MAP: Record<string, string> = {
-    person_count:        "Kepadatan Orang",
-    red_zone_count:      "Intrusi Zona Terlarang",
-    helmet_count:        "Pemakaian Helm Keselamatan",
-    vest_count:          "Pemakaian Rompi Safety",
-    mask_count:          "Pemakaian Masker",
-    fall_detected_count: "Indikasi Jatuh",
-    goggles_count:       "Pemakaian Kacamata Safety",
-    gloves_count:        "Pemakaian Sarung Tangan",
-    ladder_count:        "Penggunaan Tangga",
-    safety_cone_count:   "Keberadaan Safety Cone",
-  };
-  return MAP[check] ?? check.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 // ── Password reset ─────────────────────────────────────────────────────────────
@@ -186,6 +170,7 @@ export type ViolationEmailData = {
   violations: ViolationItem[];
   detectedAt: Date;
   snapshotUrl: string | null;
+  snapshotPath: string | null;
   eventId: string;
 };
 
@@ -220,10 +205,31 @@ export async function sendViolationEmail(to: string, data: ViolationEmailData): 
       </td>
     </tr>`).join("");
 
-  const snapshotSection = data.snapshotUrl ? `
+  // Embed the snapshot as a CID attachment (raw bytes read from local disk) rather than
+  // linking to STORAGE_BASE_URL — that URL is often unreachable by the recipient's mail
+  // client (e.g. it points at localhost during local testing), so a remote <img src> would
+  // silently fail to render. CID works the same in dev and prod since it carries the image
+  // bytes inside the email itself.
+  let snapshotAttachment: { filename: string; content: Buffer; cid: string; contentType: string } | null = null;
+  if (data.snapshotPath) {
+    try {
+      const content = await fs.readFile(data.snapshotPath);
+      snapshotAttachment = {
+        filename: `snapshot-${data.eventId}.jpg`,
+        content,
+        cid: `snapshot-${data.eventId}@lumicore`,
+        contentType: "image/jpeg"
+      };
+    } catch (err) {
+      console.warn(`[notify] failed to read snapshot for embedding (eventId=${data.eventId}):`, err);
+    }
+  }
+  const snapshotImgSrc = snapshotAttachment ? `cid:${snapshotAttachment.cid}` : data.snapshotUrl;
+
+  const snapshotSection = snapshotImgSrc ? `
     <tr><td style="padding:0 0 24px;">
       <p style="margin:0 0 10px;font-size:13px;font-weight:600;color:#374151;">Bukti Rekaman (Snapshot)</p>
-      <img src="${data.snapshotUrl}" alt="Snapshot kamera ${data.cameraName}"
+      <img src="${snapshotImgSrc}" alt="Snapshot kamera ${data.cameraName}"
         style="width:100%;max-width:100%;display:block;border:1px solid #d1d5db;" />
       <p style="margin:6px 0 0;font-size:11px;color:#9ca3af;">
         Diambil pada ${formattedDate}, pukul ${formattedTime} WIB &mdash; ${data.cameraName} (${data.cameraCode})
@@ -407,6 +413,7 @@ Nomor Referensi: EVT-${data.eventId.slice(-10).toUpperCase()}`;
     to,
     subject: `Notifikasi Pelanggaran: ${subjectLabel} — ${data.cameraName}`,
     text: textBody,
-    html
+    html,
+    attachments: snapshotAttachment ? [snapshotAttachment] : undefined
   });
 }

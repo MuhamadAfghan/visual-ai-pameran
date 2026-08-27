@@ -19,12 +19,10 @@ export type SystemSnapshot = {
   };
   workers: {
     infer: { count: number; status: WorkerStatus };
-    snapshot: { count: number; status: WorkerStatus };
     notification: { count: number; status: WorkerStatus };
   };
   queues: {
     infer: QueueStats;
-    snapshot: QueueStats;
     notification: QueueStats;
   };
   cameras: {
@@ -49,7 +47,7 @@ export type SnapshotLite = {
   inferActive: number;
 };
 
-export type QueueName = "infer" | "snapshot" | "notification";
+export type QueueName = "infer" | "notification";
 
 export type LogLevel = "info" | "warn" | "error";
 

@@ -58,7 +58,7 @@ const schemas: Record<string, AnySchema> = {
       _id: { type: "string" }, code: { type: "string" }, name: { type: "string" },
       rtspUrl: { type: "string" }, sectionId: { type: "object" },
       brand: { type: "string" }, status: { type: "string", enum: ["online", "offline", "maintenance"] },
-      minCaptureGapSeconds: { type: "integer" }, cooldownPeriod: { type: "integer" },
+      minCaptureGapSeconds: { type: "number" }, cooldownPeriod: { type: "integer" },
       isActive: { type: "boolean" }, lastCaptureAt: { type: "string", format: "date-time", nullable: true }
     }
   },
@@ -234,7 +234,7 @@ export const openApiSpec = {
       get: { tags: ["Cameras"], summary: "List cameras [viewer+]", security: auth, responses: { "200": successWrap({ type: "array", items: { $ref: "#/components/schemas/Camera" } }) } },
       post: {
         tags: ["Cameras"], summary: "Create camera [admin+]", security: auth,
-        requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["code", "name", "rtspUrl", "sectionId", "defaultPicIds"], properties: { code: { type: "string" }, name: { type: "string" }, rtspUrl: { type: "string" }, sectionId: { type: "string" }, brand: { type: "string" }, minCaptureGapSeconds: { type: "integer", default: 0 }, cooldownPeriod: { type: "integer", default: 300 }, defaultPicIds: { type: "array", items: { type: "string" }, minItems: 1 }, notes: { type: "string" }, isActive: { type: "boolean", default: true } } } } } },
+        requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["code", "name", "rtspUrl", "sectionId", "defaultPicIds"], properties: { code: { type: "string" }, name: { type: "string" }, rtspUrl: { type: "string" }, sectionId: { type: "string" }, brand: { type: "string" }, minCaptureGapSeconds: { type: "number", default: 0 }, cooldownPeriod: { type: "integer", default: 300 }, defaultPicIds: { type: "array", items: { type: "string" }, minItems: 1 }, notes: { type: "string" }, isActive: { type: "boolean", default: true } } } } } },
         responses: { "201": successWrap({ $ref: "#/components/schemas/Camera" }), "409": r409 }
       }
     },
@@ -243,7 +243,7 @@ export const openApiSpec = {
       get: { tags: ["Cameras"], summary: "Get camera by ID [viewer+]", security: auth, responses: { "200": successWrap({ $ref: "#/components/schemas/Camera" }), "404": r404 } },
       put: {
         tags: ["Cameras"], summary: "Update camera [admin+]", security: auth,
-        requestBody: { required: true, content: { "application/json": { schema: { type: "object", properties: { name: { type: "string" }, rtspUrl: { type: "string" }, minCaptureGapSeconds: { type: "integer" }, isActive: { type: "boolean" } } } } } },
+        requestBody: { required: true, content: { "application/json": { schema: { type: "object", properties: { name: { type: "string" }, rtspUrl: { type: "string" }, minCaptureGapSeconds: { type: "number" }, isActive: { type: "boolean" } } } } } },
         responses: { "200": successWrap({ $ref: "#/components/schemas/Camera" }), "404": r404 }
       },
       delete: { tags: ["Cameras"], summary: "Delete camera [super_admin]", security: auth, responses: { "200": successWrap({ type: "object" }), "404": r404 } }

@@ -1,0 +1,11 @@
+# Fake RTSP camera feed pusher (dev/demo only) — loops video files in temp/
+# over RTSP to the mediamtx service. See fake-rtsp-push.sh and docker-compose.yml
+# ("fake-rtsp" profile).
+FROM alpine:3.20
+
+RUN apk add --no-cache ffmpeg
+
+COPY fake-rtsp-push.sh /fake-rtsp-push.sh
+RUN chmod +x /fake-rtsp-push.sh
+
+ENTRYPOINT ["/fake-rtsp-push.sh"]

@@ -45,4 +45,4 @@ cameraRouter.post("/:id/scheduler/stop",  requirePermission(PERMISSIONS.CAMERAS_
 cameraRouter.post("/test-url",            requirePermission(PERMISSIONS.CAMERAS_CREATE),   testCameraUrlController);
 cameraRouter.post("/:id/test-connection", requirePermission(PERMISSIONS.CAMERAS_UPDATE),   testCameraConnectionController);
 cameraRouter.get("/:id/live-detect",      requirePermission(PERMISSIONS.CAMERAS_STREAM),   getCameraLiveDetectController);
-cameraRouter.post("/:id/push-frame",      requirePermission(PERMISSIONS.CAMERAS_UPDATE),   pushFrameController);
+cameraRouter.post("/:id/push-frame",      requirePermission(PERMISSIONS.CAMERAS_CAPTURE),  pushFrameController);

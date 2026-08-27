@@ -99,16 +99,8 @@ export function MappingFormPage({ mode }: Props) {
   const watchedChecks = useWatch({ control, name: "selectedChecks" });
   const redZoneSelected = (watchedChecks ?? []).includes("red_zone_count");
   const handrailSelected = (watchedChecks ?? []).includes("handrail_count");
-
-  // Auto-fill checks from model defaults when model changes
-  useEffect(() => {
-    if (!selectedModelId || mode === "edit") return;
-    const model = models.find((m) => m._id === selectedModelId);
-    if (model?.defaultChecks?.length) {
-      setValue("selectedChecks", model.defaultChecks as SelectedCheck[]);
-      setValue("confidenceThreshold", model.defaultConfThreshold);
-    }
-  }, [selectedModelId, models, mode, setValue]);
+  const selectedModel = models.find((m) => m._id === selectedModelId);
+  const isCustomModel = !!selectedModel?.isCustom;
 
   // Load existing mapping data for edit mode
   useEffect(() => {
@@ -136,10 +128,15 @@ export function MappingFormPage({ mode }: Props) {
     if (!cameraId) return;
     setSubmitting(true);
     try {
+      // Non-custom models can't have a customized checklist — always send the
+      // model's own defaultChecks regardless of stale/tampered client state.
+      const selectedChecks = isCustomModel
+        ? data.selectedChecks
+        : ((selectedModel?.defaultChecks as SelectedCheck[] | undefined) ?? data.selectedChecks);
       const payload = {
         modelId: data.modelId,
         isActive: data.isActive,
-        selectedChecks: data.selectedChecks,
+        selectedChecks,
         confidenceThreshold: data.confidenceThreshold,
         // roiPolygon = red zone; AI hanya pakai kalau red_zone_count dipilih.
         roiPolygon: redZoneSelected ? roiPoints : [],
@@ -209,12 +206,30 @@ export function MappingFormPage({ mode }: Props) {
           <h2 className="text-sm font-semibold text-content">Model AI</h2>
           <div>
             <label className={lbl}>Model <span className="text-red-500">*</span></label>
-            <select {...register("modelId")} className={inp}>
-              <option value="">— Pilih Model —</option>
-              {models.filter((m) => m.isActive).map((m) => (
-                <option key={m._id} value={m._id}>[{m.code}] {m.name}</option>
-              ))}
-            </select>
+            <Controller
+              name="modelId"
+              control={control}
+              render={({ field }) => (
+                <select
+                  value={field.value}
+                  onChange={(e) => {
+                    const nextId = e.target.value;
+                    field.onChange(nextId);
+                    const model = models.find((m) => m._id === nextId);
+                    if (model && !model.isCustom) {
+                      setValue("selectedChecks", model.defaultChecks as SelectedCheck[]);
+                      setValue("confidenceThreshold", model.defaultConfThreshold);
+                    }
+                  }}
+                  className={inp}
+                >
+                  <option value="">— Pilih Model —</option>
+                  {models.filter((m) => m.isActive).map((m) => (
+                    <option key={m._id} value={m._id}>[{m.code}] {m.name}</option>
+                  ))}
+                </select>
+              )}
+            />
             {errors.modelId && <p className={er}>{errors.modelId.message}</p>}
           </div>
 
@@ -222,25 +237,37 @@ export function MappingFormPage({ mode }: Props) {
           <div>
             <label className={lbl}>Detection Checks <span className="text-red-500">*</span></label>
             <p className="text-[11px] text-content-muted mb-2">
-              Default terisi dari model, bisa diubah per mapping.
+              {isCustomModel
+                ? "Model Custom — checklist deteksi bisa dipilih bebas."
+                : "Mengikuti default model yang dipilih. Pilih model Custom untuk checklist bebas."}
             </p>
             <Controller
               name="selectedChecks"
               control={control}
               render={({ field }) => (
-                <div className="grid grid-cols-3 gap-1.5 p-3 border border-surface-border rounded-lg bg-surface-elevated">
+                <div
+                  className={`grid grid-cols-3 gap-1.5 p-3 border border-surface-border rounded-lg bg-surface-elevated ${
+                    isCustomModel ? "" : "opacity-60"
+                  }`}
+                >
                   {SELECTED_CHECKS.map((check) => (
-                    <label key={check} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-surface-panel cursor-pointer">
+                    <label
+                      key={check}
+                      className={`flex items-center gap-2 px-2 py-1.5 rounded ${
+                        isCustomModel ? "hover:bg-surface-panel cursor-pointer" : "cursor-not-allowed"
+                      }`}
+                    >
                       <input
                         type="checkbox"
                         checked={field.value.includes(check)}
+                        disabled={!isCustomModel}
                         onChange={(e) => {
                           const next = e.target.checked
                             ? [...field.value, check]
                             : field.value.filter((c) => c !== check);
                           field.onChange(next);
                         }}
-                        className="rounded border-surface-border accent-primary"
+                        className="rounded border-surface-border accent-primary disabled:cursor-not-allowed"
                       />
                       <span className="text-xs text-content">{CHECK_LABELS[check]}</span>
                     </label>

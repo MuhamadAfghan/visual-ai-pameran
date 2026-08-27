@@ -3,7 +3,9 @@ import { Link, useLocation } from "react-router-dom";
 import { LayoutGrid, Activity, Map, LogOut, Sun, Moon } from "lucide-react";
 import { useAuth } from "../app/auth-provider";
 import { useGuestTheme } from "./guest-theme";
+import { useUiStore } from "../store/ui.store";
 import { cn } from "../utils/cn";
+import { Volume2, VolumeX } from "lucide-react";
 
 const navItems = [
   { to: "/guest/cameras", label: "Camera Wall", icon: LayoutGrid },
@@ -15,6 +17,8 @@ export function GuestTopBar() {
   const { user, logout } = useAuth();
   const { pathname } = useLocation();
   const { isDark, toggle } = useGuestTheme();
+  const violationAudioEnabled = useUiStore((s) => s.violationAudioEnabled);
+  const setViolationAudioEnabled = useUiStore((s) => s.setViolationAudioEnabled);
   const [now, setNow] = useState<Date>(new Date());
 
   useEffect(() => {
@@ -27,7 +31,7 @@ export function GuestTopBar() {
       {/* Logo + product label */}
       <div className="flex items-center gap-3 mr-6">
         <img
-          src="/assets/images/toyota_logo.png"
+          src="/assets/images/lumi_logo.png"
           alt="Toyota"
           className="h-5 w-auto select-none"
           draggable={false}
@@ -92,6 +96,16 @@ export function GuestTopBar() {
         </div>
 
         <div className="w-px h-6 bg-surface-border" />
+
+        {/* Violation audio alert mute toggle */}
+        <button
+          onClick={() => setViolationAudioEnabled(!violationAudioEnabled)}
+          title={violationAudioEnabled ? "Matikan alert suara pelanggaran" : "Aktifkan alert suara pelanggaran"}
+          aria-pressed={violationAudioEnabled}
+          className="flex items-center justify-center w-8 h-8 rounded border border-surface-border text-content-muted hover:text-content hover:bg-surface-elevated transition-colors"
+        >
+          {violationAudioEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+        </button>
 
         {/* Theme toggle */}
         <button

@@ -8,3 +8,4 @@ roboflow>=1.1.49
 grpcio>=1.62.0
 grpcio-tools>=1.62.0
 protobuf>=4.25.0
+trackers>=2.4.0

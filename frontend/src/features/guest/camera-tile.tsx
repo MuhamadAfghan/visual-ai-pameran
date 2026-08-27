@@ -135,8 +135,7 @@ export function CameraTile({ camera, violationCount = 0, latestEvent }: Props) {
             autoPlay
             playsInline
             muted
-            className="w-full h-full object-cover"
-            style={{ transform: "scaleX(-1)" }}
+            className="w-full h-full object-cover" 
             onCanPlay={() => setDeviceVideoReady(true)}
           />
         ) : /* RTSP MJPEG stream */ streamUrl && !streamError ? (

@@ -162,6 +162,7 @@ async function processNotification(payload: NotificationJobPayload): Promise<voi
         violations: relevantViolations,
         detectedAt: event.detectedAt,
         snapshotUrl: event.snapshotUrl ?? null,
+        snapshotPath: event.snapshotPath ?? null,
         eventId
       });
 

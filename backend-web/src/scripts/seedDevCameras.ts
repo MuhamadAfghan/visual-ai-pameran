@@ -1,8 +1,15 @@
 /**
- * Seed 3 kamera dev dari video di backend/temp/ (street, stairs, stairs_people).
+ * Seed kamera dev dari video di backend/temp/ (street, stairs, stairs_people, dst).
  *
- * Default rtspUrl = rtsp://localhost:8554/<path> → cocok dengan $Streams di
- * scripts/dev/start-fake-rtsp.ts (jalankan `npm run dev:full` agar stream hidup).
+ * Default rtspUrl = rtsp://<RTSP_FAKE_HOST>:8554/<path> → cocok dengan $Streams di
+ * scripts/dev/start-fake-rtsp.ps1 (native Windows: `npm run dev:full` agar stream
+ * hidup) atau docker-compose profile "fake-rtsp" (`docker compose --profile
+ * fake-rtsp up -d`). RTSP_FAKE_HOST default "localhost" (native); set ke
+ * "mediamtx" saat menjalankan seed ini DI DALAM container backend-web, karena
+ * dari situ "localhost" merujuk ke container itu sendiri, bukan host MediaMTX:
+ *
+ *   docker compose exec -e RTSP_FAKE_HOST=mediamtx backend-web node dist/scripts/seedDevCameras.js
+ *
  * Set env CAM_USE_FILE=1 untuk pakai path file langsung (tanpa MediaMTX; ffmpeg
  * loop file di jalur live, tapi snapshot/scheduler hanya dapat frame pertama).
  *
@@ -22,6 +29,7 @@ import { PicModel } from "../models/pic.model";
 import { CameraModel } from "../models/camera.model";
 
 const USE_FILE = process.env.CAM_USE_FILE === "1";
+const RTSP_FAKE_HOST = process.env.RTSP_FAKE_HOST || "localhost";
 
 const CAMERAS = [
   { code: "street-01", name: "Street (dev)", file: "street.mp4", stream: "street-cam" },
@@ -31,6 +39,9 @@ const CAMERAS = [
   { code: "plant-01", name: "Plant (dev)", file: "plant.mp4", stream: "plant-cam" },
   { code: "road-01", name: "Road (dev)", file: "road.mp4", stream: "road-cam" },
   { code: "use-phone-4-01", name: "Use Phone 4 (dev)", file: "use_phone_4.MOV", stream: "use-phone-4-cam" },
+  { code: "construction-workers-01", name: "Construction Workers (dev)", file: "construction_workers.mp4", stream: "construction-workers-cam" },
+  { code: "construction-site-01", name: "Construction Site (dev)", file: "construction_site.mp4", stream: "construction-site-cam" },
+  { code: "construction-ppe-01", name: "Construction PPE (dev)", file: "construction_ppe.mp4", stream: "construction-ppe-cam" },
 ];
 
 async function resolveSectionId(): Promise<mongoose.Types.ObjectId> {
@@ -66,7 +77,7 @@ async function seed(): Promise<void> {
       console.warn(`  ⚠ skip ${c.code}: ${filePath} tidak ada`);
       continue;
     }
-    const rtspUrl = USE_FILE ? filePath : `rtsp://localhost:8554/${c.stream}`;
+    const rtspUrl = USE_FILE ? filePath : `rtsp://${RTSP_FAKE_HOST}:8554/${c.stream}`;
     const existing = await CameraModel.findOne({ code: c.code });
     if (existing) {
       existing.set({ name: c.name, rtspUrl, sectionId, defaultPicIds: [picId], isActive: true });
@@ -87,7 +98,8 @@ async function seed(): Promise<void> {
   console.log(
     USE_FILE
       ? "\nMode FILE: kamera baca file langsung — backend cukup `npm run dev`."
-      : "\nMode RTSP: jalankan `npm run dev:full` (MediaMTX+ffmpeg) agar stream hidup.",
+      : `\nMode RTSP (host=${RTSP_FAKE_HOST}): jalankan MediaMTX+ffmpeg dulu agar stream hidup — ` +
+        "native: `npm run dev:full` | docker: `docker compose --profile fake-rtsp up -d --build`.",
   );
 }
 

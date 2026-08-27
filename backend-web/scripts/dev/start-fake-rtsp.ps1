@@ -6,8 +6,11 @@
 #   3. Backend connect ke rtsp://localhost:8554/<path>
 #
 # Streams:
-#   temp/office.mp4   -> rtsp://localhost:8554/office-cam       (file, di $Streams)
-#   temp/plant.mp4    -> rtsp://localhost:8554/plant-cam        (file, di $Streams)
+#   temp/office.mp4              -> rtsp://localhost:8554/office-cam               (file, di $Streams)
+#   temp/plant.mp4               -> rtsp://localhost:8554/plant-cam                (file, di $Streams)
+#   temp/construction_workers.mp4 -> rtsp://localhost:8554/construction-workers-cam (file, di $Streams)
+#   temp/construction_site.mp4    -> rtsp://localhost:8554/construction-site-cam    (file, di $Streams)
+#   temp/construction_ppe.mp4     -> rtsp://localhost:8554/construction-ppe-cam     (file, di $Streams)
 #   webcam C920 (eksternal) -> rtsp://localhost:8554/webcam-external  (by-name)
 #
 # Webcam: device dipilih by NAMA (lihat $WebcamMap di blok "Auto-detect kamera"),
@@ -37,13 +40,16 @@ $ConfigPath = Join-Path $ScriptDir "mediamtx-fake.yml"
 # semua kamera dshow yang terdeteksi diisi otomatis ke path stabil
 # webcam-1, webcam-2, ... (lihat blok "Auto-detect kamera" di bawah).
 $Streams = @(
-    @{ Path = "office-cam";        Source = (Join-Path $BackendDir "temp\office.mp4") }
-    @{ Path = "plant-cam";         Source = (Join-Path $BackendDir "temp\plant.mp4") }
-    @{ Path = "road-cam";          Source = (Join-Path $BackendDir "temp\road.mp4") }
-    @{ Path = "street-cam";        Source = (Join-Path $BackendDir "temp\street.mp4") }
-    @{ Path = "stairs-cam";        Source = (Join-Path $BackendDir "temp\stairs.mp4") }
-    @{ Path = "stairs-people-cam"; Source = (Join-Path $BackendDir "temp\stairs_people.mp4") }
-    @{ Path = "use-phone-4-cam";   Source = (Join-Path $BackendDir "temp\use_phone_4.MOV") }
+    @{ Path = "office-cam";              Source = (Join-Path $BackendDir "temp\office.mp4") }
+    @{ Path = "plant-cam";               Source = (Join-Path $BackendDir "temp\plant.mp4") }
+    @{ Path = "road-cam";                Source = (Join-Path $BackendDir "temp\road.mp4") }
+    @{ Path = "street-cam";              Source = (Join-Path $BackendDir "temp\street.mp4") }
+    @{ Path = "stairs-cam";              Source = (Join-Path $BackendDir "temp\stairs.mp4") }
+    @{ Path = "stairs-people-cam";       Source = (Join-Path $BackendDir "temp\stairs_people.mp4") }
+    @{ Path = "use-phone-4-cam";         Source = (Join-Path $BackendDir "temp\use_phone_4.MOV") }
+    @{ Path = "construction-workers-cam"; Source = (Join-Path $BackendDir "temp\construction_workers.mp4") }
+    @{ Path = "construction-site-cam";    Source = (Join-Path $BackendDir "temp\construction_site.mp4") }
+    @{ Path = "construction-ppe-cam";     Source = (Join-Path $BackendDir "temp\construction_ppe.mp4") }
 )
 
 $videoExts = @(".mp4", ".mov", ".mkv", ".webm", ".avi", ".ts", ".flv")

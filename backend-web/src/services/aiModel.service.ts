@@ -1,4 +1,5 @@
 import { AiModelModel, SELECTED_CHECKS, type SelectedCheck } from "../models/aiModel.model";
+import { CameraMappingModel } from "../models/cameraMapping.model";
 
 export type AiModelInput = {
   code: string;
@@ -29,7 +30,12 @@ export async function updateAiModel(id: string, input: AiModelUpdateInput) {
 }
 
 export async function deleteAiModel(id: string) {
-  return AiModelModel.findByIdAndDelete(id);
+  const aiModel = await AiModelModel.findByIdAndDelete(id);
+  if (!aiModel) return null;
+
+  await CameraMappingModel.deleteMany({ modelId: id });
+
+  return aiModel;
 }
 
 export { SELECTED_CHECKS };

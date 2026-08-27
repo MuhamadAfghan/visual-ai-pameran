@@ -242,6 +242,11 @@ def _compute_check_results(selected_checks: list[str], detections: list[dict]) -
         all_matched: list[dict] = []
         breakdown: dict[str, int] = {}
         source_labels: set[str] = set()
+        # Internal-only (not part of the wire response — grpc_app.py's
+        # _check_result_to_proto only reads known fields): per-category detection
+        # lists, so a later pass (e.g. _apply_ppe_violator_tracking) can assign
+        # track_id to the individual violators instead of just a count.
+        category_detections: dict[str, list[dict]] = {}
         for cat in spec.categories:
             candidates = by_label.get(cat.source_label, [])
             if cat.attribute_filter:
@@ -251,6 +256,7 @@ def _compute_check_results(selected_checks: list[str], detections: list[dict]) -
             all_matched.extend(matched)
             breakdown[cat.key] = len(matched)
             source_labels.add(cat.source_label)
+            category_detections[cat.key] = matched
 
         results.append({
             "check": check_name,
@@ -260,6 +266,7 @@ def _compute_check_results(selected_checks: list[str], detections: list[dict]) -
                 "source_labels": sorted(source_labels),
                 "breakdown": breakdown,
             },
+            "_category_detections": category_detections,
         })
 
     return results
@@ -312,7 +319,7 @@ def _point_in_polygon(point: tuple[float, float], polygon: list[tuple[float, flo
 
 
 def _apply_red_zone(
-    selected_checks: list[str],
+    payload: InferenceRequest,
     detections: list[dict],
     red_zones: list,
     frame_shape: tuple[int, ...],
@@ -325,7 +332,7 @@ def _apply_red_zone(
     `roi_polygon` adalah legacy fallback (single polygon).
     Memodifikasi `check_results` dan `detections[].attributes.in_red_zone` in-place.
     """
-    if "red_zone_count" not in selected_checks:
+    if "red_zone_count" not in payload.selected_checks:
         return
 
     cr = next((c for c in check_results if c["check"] == "red_zone_count"), None)
@@ -346,11 +353,14 @@ def _apply_red_zone(
         if len(pts) >= 3:
             polygons_px.append(pts)
 
+    persons = [det for det in detections if det["label"] == "person"]
+    if persons:
+        ts = payload.timestamp_utc.timestamp()
+        camera_track_store.update(f"{payload.camera_id}::red_zone_count", ts, persons)
+
     intruders: list[dict] = []
     if polygons_px:
-        for det in detections:
-            if det["label"] != "person":
-                continue
+        for det in persons:
             foot = _foot_point(det)
             in_any = any(_point_in_polygon(foot, poly) for poly in polygons_px)
             det.setdefault("attributes", {})["in_red_zone"] = "true" if in_any else "false"
@@ -365,6 +375,7 @@ def _apply_red_zone(
         "source_labels": ["person"],
         "breakdown": {"in_red_zone": count},
     }
+    cr["_violator_detections"] = intruders
 
 
 # ---------------------------------------------------------------------------
@@ -416,7 +427,7 @@ def _dist_to_polylines(p, lines_px: list[list[tuple[float, float]]]) -> float:
 
 
 def _apply_handrail(
-    selected_checks: list[str],
+    payload: InferenceRequest,
     detections: list[dict],
     stairs_zone: list,
     handrail_lines: list,
@@ -428,7 +439,7 @@ def _apply_handrail(
     in-place. Tanpa efek kalau check tak dipilih / zona<3 titik / garis<2 titik.
     Orang tanpa keypoint wrist tidak dinilai (konservatif, hindari false positive).
     """
-    if "handrail_count" not in selected_checks:
+    if "handrail_count" not in payload.selected_checks:
         return
     cr = next((c for c in check_results if c["check"] == "handrail_count"), None)
     if cr is None:
@@ -440,12 +451,15 @@ def _apply_handrail(
     lines_px = [[(p.x * width, p.y * height) for p in line]
                 for line in handrail_lines if len(line) >= 2]
 
+    persons = [det for det in detections if det["label"] == "person"]
+    if persons:
+        ts = payload.timestamp_utc.timestamp()
+        camera_track_store.update(f"{payload.camera_id}::handrail_count", ts, persons)
+
     on_stairs = holding = not_holding = 0
     violators: list[dict] = []
     if len(zone_px) >= 3 and lines_px:
-        for det in detections:
-            if det["label"] != "person":
-                continue
+        for det in persons:
             attrs = det.setdefault("attributes", {})
             if not _point_in_polygon(_foot_point(det), zone_px):
                 attrs["on_stairs"] = "false"
@@ -472,6 +486,7 @@ def _apply_handrail(
         "source_labels": ["person"],
         "breakdown": {"on_stairs": on_stairs, "holding": holding, "not_holding": not_holding},
     }
+    cr["_violator_detections"] = violators
 
 
 # ---------------------------------------------------------------------------
@@ -516,15 +531,15 @@ def _apply_walking_gate(
     tracked = [d for d in detections if d["label"] in track_labels]
     camera_track_store.update(f"{payload.camera_id}::{check_name}", ts, tracked)
 
-    walking = sum(
-        1
-        for d in tracked
+    walking_violators = [
+        d for d in tracked
         if d["label"] == walking_label
         and d.get("attributes", {}).get("walking") == "true"
-    )
+    ]
     for cr in check_results:
         if cr["check"] == check_name:
-            cr["details"].setdefault("breakdown", {})["walking"] = walking
+            cr["details"].setdefault("breakdown", {})["walking"] = len(walking_violators)
+            cr["_violator_detections"] = walking_violators
             break
 
 
@@ -764,6 +779,7 @@ def _apply_holding_phone(
                     "violating": violating,
                 },
             }
+            cr["_violator_detections"] = violators
             break
 
 
@@ -835,6 +851,58 @@ _PPE_VIOLATIONS: dict[str, dict[str, str]] = {
 }
 
 
+def _apply_ppe_violator_tracking(payload: InferenceRequest, check_results: list[dict]) -> None:
+    """Assign track_id to each individual PPE-violation detection (`no_helmet`,
+    `no_mask`, ...) so `_evaluate_violations` can fire one violation per person
+    instead of one aggregate per check. Namespaced per check+category (same
+    pattern as `_apply_walking_gate`) so an empty/absent category never
+    disturbs another category's tracker state.
+    """
+    ts = payload.timestamp_utc.timestamp()
+    for cr in check_results:
+        spec = _PPE_VIOLATIONS.get(cr["check"])
+        if spec is None:
+            continue
+        dets = cr.get("_category_detections", {}).get(spec["breakdown_key"], [])
+        if dets:
+            camera_track_store.update(f"{payload.camera_id}::{cr['check']}::{spec['breakdown_key']}", ts, dets)
+        cr["_violator_detections"] = dets
+
+
+def _fanned_out_violations(
+    cr: dict,
+    *,
+    violation_type: str,
+    severity: str,
+    aggregate_details: dict,
+) -> list[dict]:
+    """One violation per violator detection (own track_id + bbox) when an
+    earlier `_apply_*` pass captured `_violator_detections`; otherwise fall
+    back to a single aggregate violation with track_id=None, exactly like
+    before this per-person fan-out existed — a safety net for any check that
+    never populates violator-level detail (e.g. crowd_exceeded).
+    """
+    violators = cr.get("_violator_detections")
+    if not violators:
+        return [{
+            "type": violation_type,
+            "severity": severity,
+            "score": round(cr["confidence"], 4),
+            "track_id": None,
+            "details": aggregate_details,
+        }]
+    return [
+        {
+            "type": violation_type,
+            "severity": severity,
+            "score": round(d["confidence"], 4),
+            "track_id": d.get("track_id"),
+            "details": {**aggregate_details, "bbox": d["bbox"]},
+        }
+        for d in violators
+    ]
+
+
 def _evaluate_violations(
     camera_id: str,
     rules: CameraRules,
@@ -866,31 +934,23 @@ def _evaluate_violations(
         # Polygon-nya yang menentukan ada/tidaknya zona,
         # jadi violation fire begitu ada minimal satu orang yang kakinya masuk.
         elif check == "red_zone_count" and cr["value"] > 0:
-            violations.append({
-                "type": "red_zone_intrusion",
-                "severity": "high",
-                "score": round(cr["confidence"], 4),
-                "track_id": None,
-                "details": {
-                    "intruder_count": cr["value"],
-                    "camera_id": camera_id,
-                },
-            })
+            violations.extend(_fanned_out_violations(
+                cr,
+                violation_type="red_zone_intrusion",
+                severity="high",
+                aggregate_details={"intruder_count": cr["value"], "camera_id": camera_id},
+            ))
 
     # Handrail: orang di tangga yang tidak memegang pegangan (value sudah dihitung
     # _apply_handrail = jumlah not_holding).
     for cr in check_results:
         if cr["check"] == "handrail_count" and cr["value"] > 0:
-            violations.append({
-                "type": "handrail_violation",
-                "severity": "medium",
-                "score": round(cr["confidence"], 4),
-                "track_id": None,
-                "details": {
-                    "not_holding_count": cr["value"],
-                    "camera_id": camera_id,
-                },
-            })
+            violations.extend(_fanned_out_violations(
+                cr,
+                violation_type="handrail_violation",
+                severity="medium",
+                aggregate_details={"not_holding_count": cr["value"], "camera_id": camera_id},
+            ))
 
     # Hand in pocket WHILE WALKING (Fase B): tangan di saku baru jadi bahaya
     # (tersandung) saat orangnya bergerak. `walking` dihitung tracker temporal di
@@ -900,32 +960,24 @@ def _evaluate_violations(
         if cr["check"] == "hand_in_pocket_count":
             walking = cr["details"].get("breakdown", {}).get("walking", 0)
             if walking > 0:
-                violations.append({
-                    "type": "hand_in_pocket_violation",
-                    "severity": "high",
-                    "score": round(cr["confidence"], 4),
-                    "track_id": None,
-                    "details": {
-                        "hand_in_pocket_walking_count": walking,
-                        "camera_id": camera_id,
-                    },
-                })
+                violations.extend(_fanned_out_violations(
+                    cr,
+                    violation_type="hand_in_pocket_violation",
+                    severity="high",
+                    aggregate_details={"hand_in_pocket_walking_count": walking, "camera_id": camera_id},
+                ))
 
     # Holding phone (Fase B, kompositional): violation = orang yang HP-di-tangan
     # ∧ menunduk (proxy "melihat HP") ∧ berjalan. `value` sudah di-set ke jumlah
     # orang tsb oleh _apply_holding_phone (harus jalan sebelum fungsi ini).
     for cr in check_results:
         if cr["check"] == "holding_phone_count" and cr["value"] > 0:
-            violations.append({
-                "type": "holding_phone_violation",
-                "severity": "high",
-                "score": round(cr["confidence"], 4),
-                "track_id": None,
-                "details": {
-                    "holding_phone_count": cr["value"],
-                    "camera_id": camera_id,
-                },
-            })
+            violations.extend(_fanned_out_violations(
+                cr,
+                violation_type="holding_phone_violation",
+                severity="high",
+                aggregate_details={"holding_phone_count": cr["value"], "camera_id": camera_id},
+            ))
 
     # PPE compliance (mask/helmet/vest/goggles/gloves/fall_detected): zero-tolerance
     # per-APD. `value` check PPE = total deteksi (compliant + violation), jadi kondisi
@@ -937,16 +989,12 @@ def _evaluate_violations(
             continue
         count = cr["details"].get("breakdown", {}).get(spec["breakdown_key"], 0)
         if count > 0:
-            violations.append({
-                "type": spec["type"],
-                "severity": spec["severity"],
-                "score": round(cr["confidence"], 4),
-                "track_id": None,
-                "details": {
-                    spec["count_key"]: count,
-                    "camera_id": camera_id,
-                },
-            })
+            violations.extend(_fanned_out_violations(
+                cr,
+                violation_type=spec["type"],
+                severity=spec["severity"],
+                aggregate_details={spec["count_key"]: count, "camera_id": camera_id},
+            ))
 
     return violations
 
@@ -958,12 +1006,13 @@ def run_inference(payload: InferenceRequest) -> dict:
     frame = load_image(payload.image_uri, payload.image_base64)
     detections, models_used = _run_detector(payload, frame, device)
     check_results = _compute_check_results(payload.selected_checks, detections)
+    _apply_ppe_violator_tracking(payload, check_results)
     _apply_red_zone(
-        payload.selected_checks, detections, payload.red_zones, frame.shape, check_results,
+        payload, detections, payload.red_zones, frame.shape, check_results,
         roi_polygon=payload.roi_polygon,
     )
     _apply_handrail(
-        payload.selected_checks, detections, payload.stairs_zone, payload.handrail_lines,
+        payload, detections, payload.stairs_zone, payload.handrail_lines,
         frame.shape, check_results,
     )
     _apply_hand_in_pocket_walking(payload, detections, check_results)

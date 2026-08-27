@@ -2,16 +2,34 @@ import { useCallback, useEffect, useRef } from "react";
 import { cn } from "../utils/cn";
 import type { Detection, RedZone } from "../types/event.types";
 
-const BBOX_COLORS = [
-  "#22c55e", "#3b82f6", "#f59e0b", "#ef4444",
-  "#8b5cf6", "#ec4899", "#14b8a6", "#f97316"
-];
+// Detection labels that represent a rule violation on their own (see naming
+// convention in ai/CLAUDE.md — most are `no_<noun>`, but hand_in_pocket,
+// fall_detected and improper_mask are violations in their positive form).
+const VIOLATION_LABELS = new Set([
+  "no_mask",
+  "improper_mask",
+  "no_helmet",
+  "no_vest",
+  "no_goggles",
+  "no_gloves",
+  "fall_detected",
+  "hand_in_pocket"
+]);
 
+const VIOLATION_COLOR = "#ef4444"; // red-500
+const COMPLIANT_COLOR = "#22c55e"; // green-500
+
+/** True when a detection is a violation — by class label, or by a composite
+ *  attribute (e.g. red-zone intrusion) applied to an otherwise-neutral label. */
 // eslint-disable-next-line react-refresh/only-export-components
-export function labelColor(label: string): string {
-  let h = 0;
-  for (let i = 0; i < label.length; i++) h = label.charCodeAt(i) + ((h << 5) - h);
-  return BBOX_COLORS[Math.abs(h) % BBOX_COLORS.length];
+export function isViolationDetection(det: Pick<Detection, "label" | "attributes">): boolean {
+  return det.attributes?.in_red_zone === "true" || VIOLATION_LABELS.has(det.label);
+}
+
+/** Red for violations, green otherwise — used for every bbox/legend swatch. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function detectionColor(det: Pick<Detection, "label" | "attributes">): string {
+  return isViolationDetection(det) ? VIOLATION_COLOR : COMPLIANT_COLOR;
 }
 
 type Props = {
@@ -106,9 +124,7 @@ export function SnapshotWithBbox({
       const ry = oy + y1 * scale;
       const rw = (x2 - x1) * scale;
       const rh = (y2 - y1) * scale;
-      // People inside red zone get a red bbox override
-      const inRedZone = det.attributes?.in_red_zone === "true";
-      const color = inRedZone ? "#ef4444" : labelColor(det.label);
+      const color = detectionColor(det);
 
       ctx.strokeStyle = color;
       ctx.lineWidth = compact ? 1 : 1.5;

@@ -18,7 +18,7 @@ import type { PermissionAction } from "../types/auth";
 const ALL_ACTIONS: PermissionAction[] = [
   "view", "create", "update", "delete",
   "export", "stream", "snapshot", "scheduler",
-  "acknowledge", "false_positive", "toggle",
+  "acknowledge", "false_positive", "toggle", "capture",
 ];
 
 async function seed() {

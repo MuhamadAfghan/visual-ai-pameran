@@ -20,6 +20,11 @@ type UiState = {
   theme: "light" | "dark";
   setTheme: (theme: "light" | "dark") => void;
 
+  // Chime + spoken (id-ID) announcement on violation detection. Defaults to
+  // on since this exists for safety — it's opt-out, not opt-in.
+  violationAudioEnabled: boolean;
+  setViolationAudioEnabled: (enabled: boolean) => void;
+
   toasts: Toast[];
   addToast: (toast: Omit<Toast, "id">) => void;
   removeToast: (id: string) => void;
@@ -29,6 +34,9 @@ const savedTheme = localStorage.getItem("cctv_theme") as "light" | "dark" | null
 const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
 const initialTheme: "light" | "dark" = savedTheme ?? (systemDark ? "dark" : "light");
 document.documentElement.classList.toggle("dark", initialTheme === "dark");
+
+const savedViolationAudioEnabled = localStorage.getItem("cctv_violation_audio_enabled");
+const initialViolationAudioEnabled = savedViolationAudioEnabled === null ? true : savedViolationAudioEnabled === "true";
 
 export const useUiStore = create<UiState>((set) => ({
   sidebarCollapsed: false,
@@ -43,6 +51,12 @@ export const useUiStore = create<UiState>((set) => ({
     localStorage.setItem("cctv_theme", theme);
     document.documentElement.classList.toggle("dark", theme === "dark");
     set({ theme });
+  },
+
+  violationAudioEnabled: initialViolationAudioEnabled,
+  setViolationAudioEnabled: (enabled) => {
+    localStorage.setItem("cctv_violation_audio_enabled", String(enabled));
+    set({ violationAudioEnabled: enabled });
   },
 
   toasts: [],

@@ -41,6 +41,7 @@ export type AiModel = {
   defaultConfThreshold: number;
   version: string;
   isActive: boolean;
+  isCustom: boolean;
   createdAt: string;
   updatedAt: string;
 };

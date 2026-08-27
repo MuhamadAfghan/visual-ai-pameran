@@ -18,15 +18,27 @@ type RedZone = {
   points: Array<{ x: number; y: number }>;
 };
 
-const BBOX_PALETTE = [
-  "#22c55e", "#3b82f6", "#f59e0b", "#ef4444",
-  "#8b5cf6", "#ec4899", "#14b8a6", "#f97316"
-];
+// Detection labels that represent a rule violation on their own (see naming
+// convention in ai/CLAUDE.md — most are `no_<noun>`, but hand_in_pocket,
+// fall_detected and improper_mask are violations in their positive form).
+const VIOLATION_LABELS = new Set([
+  "no_mask",
+  "improper_mask",
+  "no_helmet",
+  "no_vest",
+  "no_goggles",
+  "no_gloves",
+  "fall_detected",
+  "hand_in_pocket"
+]);
 
-function labelColor(label: string): string {
-  let h = 0;
-  for (let i = 0; i < label.length; i++) h = label.charCodeAt(i) + ((h << 5) - h);
-  return BBOX_PALETTE[Math.abs(h) % BBOX_PALETTE.length];
+const VIOLATION_COLOR = "#ef4444"; // red-500
+const COMPLIANT_COLOR = "#22c55e"; // green-500
+
+/** Red for violations (by label or red-zone attribute), green otherwise. */
+function detectionColor(det: Detection): string {
+  const inRedZone = det.attributes?.in_red_zone === "true";
+  return inRedZone || VIOLATION_LABELS.has(det.label) ? VIOLATION_COLOR : COMPLIANT_COLOR;
 }
 
 /**
@@ -106,8 +118,7 @@ function buildSvg(w: number, h: number, detections: Detection[], redZones: RedZo
     const bh = y2 - y1;
     if (bw <= 0 || bh <= 0) continue;
 
-    const inRedZone = det.attributes?.in_red_zone === "true";
-    const color = inRedZone ? "#ef4444" : labelColor(det.label);
+    const color = detectionColor(det);
 
     const pct = Math.round(det.confidence * 100);
     const label = `${det.label} ${pct}%`;

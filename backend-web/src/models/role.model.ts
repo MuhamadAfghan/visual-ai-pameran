@@ -7,7 +7,7 @@ const permissionEntrySchema = new Schema(
     actions: [{ type: String, enum: [
       "view", "create", "update", "delete",
       "export", "stream", "snapshot", "scheduler",
-      "acknowledge", "false_positive", "toggle",
+      "acknowledge", "false_positive", "toggle", "capture",
     ] }],
   },
   { _id: false }

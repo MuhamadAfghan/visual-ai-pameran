@@ -26,6 +26,11 @@ export type SettingsInput = {
     cooldownMinutes?: number;
   };
   timezone?: string;
+  violationAlert?: {
+    audioStyle?: "beep" | "beep_speech";
+    repeatMode?: "cooldown" | "continuous";
+    repeatIntervalSeconds?: number;
+  };
 };
 
 export async function getSettings() {
@@ -64,6 +69,10 @@ export async function updateSettings(input: SettingsInput) {
   }
   if (input.timezone !== undefined) {
     doc.set("timezone", input.timezone);
+  }
+  if (input.violationAlert) {
+    Object.assign(doc.violationAlert!, input.violationAlert);
+    doc.markModified("violationAlert");
   }
 
   return doc.save();

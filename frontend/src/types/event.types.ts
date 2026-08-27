@@ -33,6 +33,7 @@ export type DetectionEvent = {
   status: EventStatus;
   snapshotPath?: string;
   snapshotUrl?: string;
+  originalSnapshotUrl?: string;
   detections?: Detection[];
   redZones?: RedZone[];
   detectedAt: string;

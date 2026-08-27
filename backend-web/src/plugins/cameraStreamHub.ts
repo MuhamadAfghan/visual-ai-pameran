@@ -26,12 +26,28 @@ const RW_TIMEOUT_US = 10_000_000; // 10s
 const NO_DATA_TIMEOUT_MS = 15_000;
 
 // Output framerate of the shared MJPEG feed (used by dashboard tiles / cards).
-const STREAM_FPS = 12;
+// Decode+scale has no ML cost, so this can run ahead of what inference can
+// keep up with — the capture-cycle throttle below (not this) is what actually
+// paces the expensive part per hub.
+const STREAM_FPS = 20;
 
 // Shared decode width. One ffmpeg feeds the display feed AND inference. YOLO
 // resizes to ~640 internally, so matching it avoids inflating the gRPC payload
 // and per-frame decode for zero model-accuracy gain.
 const STREAM_MAX_WIDTH = 640;
+
+// Capture-cycle rate cap for a monitoring hub with nobody on its detail page
+// ("ambient"). Violation checks are sustained-state (a missing helmet doesn't
+// disappear within one frame), so ~0.67 fps is plenty to still catch it while
+// not burning inference capacity on a camera nobody is currently watching.
+// Bypassed entirely once the hub is "boosted" — see onFrame.
+const AMBIENT_CYCLE_MIN_INTERVAL_MS = 1_500;
+
+// A poll-fallback viewer (live-detect, not SSE) is treated as still "boosted"
+// if it polled within this window. Frontend's poll-fallback interval is 1.5s
+// (POLL_FALLBACK_MS in use-live-camera-stream.ts) — 2x that so one delayed/
+// dropped poll doesn't flicker the boost off and on.
+const POLL_ACTIVE_WINDOW_MS = 3_000;
 
 // Keep a viewOnly hub alive this long after its last subscriber/poll leaves.
 // Monitoring hubs never idle-teardown — they run for as long as the camera is
@@ -105,11 +121,11 @@ export type LivePollResponse =
   | { seq: number; unchanged: true; monitored: true }
   | (LiveResult & { unchanged: false; monitored: true });
 
-// Lightweight SSE payload — deliberately omits `frame`. The pixel stream
-// already flows continuously over the MJPEG /stream endpoint; repeating the
-// same JPEG bytes on every result would roughly double pixel cost for no
-// benefit, since a client rendering both already has the frame from /stream.
-export type LiveStreamResultPayload = Omit<LiveResult, "frame">;
+// SSE payload — includes `frame` so the client renders the exact analyzed
+// frame together with its boxes as one atomic update. The live view no longer
+// renders a separately-paced video/MJPEG feed alongside this, so this is the
+// only pixel source and can't be dropped without going blank.
+export type LiveStreamResultPayload = LiveResult;
 
 type ActiveMapping = Awaited<ReturnType<typeof getActiveMappingsForCamera>>[number];
 
@@ -117,9 +133,12 @@ type ActiveMapping = Awaited<ReturnType<typeof getActiveMappingsForCamera>>[numb
 // avoids a Mongo round-trip on every cycle (which can run several times/sec).
 type HubContext = {
   mappings: ActiveMapping[];
+  cameraName: string;
   rules?: CameraRules;
   redZones: Array<{ name: string; points: Array<{ x: number; y: number }> }>;
   cooldownPeriod: number;
+  repeatMode: "cooldown" | "continuous";
+  repeatIntervalSeconds: number;
   timezone: string;
   expiresAt: Date;
   latestUrl: string;
@@ -155,6 +174,8 @@ type Hub = {
   latest: LiveResult;
   resultSubscribers: Set<ResultSubscriber>;
   captureRunning: boolean;
+  lastCycleStartAt: number; // gates AMBIENT_CYCLE_MIN_INTERVAL_MS when not boosted
+  lastViewerPingAt: number; // stamped by poll-fallback — see pollLiveDetections
   lastLatencyLogAt: number;
   context: HubContext | null;
   contextAt: number;
@@ -241,8 +262,21 @@ function attachFfmpegHandlers(hub: Hub): void {
     }
   });
 
-  hub.ffmpeg.on("error", () => handleFfmpegDown(hub, "ffmpeg error"));
-  hub.ffmpeg.on("close", () => handleFfmpegDown(hub, "ffmpeg closed"));
+  // Node can emit BOTH 'error' and 'close' for one failed process. Without
+  // this guard each dead ffmpeg fired handleFfmpegDown twice — and since
+  // scheduleReconnect just overwrites hub.reconnectTimer rather than
+  // cancelling the previous one, both timers went on to fire and each spawn
+  // a replacement ffmpeg. If either of those also failed, the same doubling
+  // happened again on top of itself, so one unreachable camera cascaded into
+  // hundreds of concurrent ffmpeg processes within minutes.
+  let handled = false;
+  const onDown = (reason: string): void => {
+    if (handled) return;
+    handled = true;
+    handleFfmpegDown(hub, reason);
+  };
+  hub.ffmpeg.on("error", () => onDown("ffmpeg error"));
+  hub.ffmpeg.on("close", () => onDown("ffmpeg closed"));
 }
 
 // ── Hub lifecycle ─────────────────────────────────────────────────────────────
@@ -264,6 +298,8 @@ function createHub(cameraId: string, rtspUrl: string, mode: HubMode): Hub {
     latest: EMPTY_RESULT,
     resultSubscribers: new Set(),
     captureRunning: false,
+    lastCycleStartAt: 0,
+    lastViewerPingAt: 0,
     lastLatencyLogAt: 0,
     context: null,
     contextAt: 0,
@@ -290,15 +326,28 @@ function onFrame(hub: Hub, frame: Buffer): void {
   hub.watchdog = setTimeout(() => handleFfmpegDown(hub, "no data"), NO_DATA_TIMEOUT_MS);
   for (const sub of hub.subscribers) sub.onFrame(frame);
 
-  // Frame arrival IS the capture-cycle trigger: no fixed-interval timer at
-  // all, so cadence is bounded only by (a) how fast the camera/ffmpeg actually
-  // decodes new frames and (b) how long the previous cycle took — never an
-  // artificial wait, and never re-analyzing a frame we've already processed.
+  // Frame arrival IS the capture-cycle trigger: never re-analyzing a frame
+  // we've already processed, and never gated by more than one in-flight cycle
+  // (captureRunning). On top of that, a hub with nobody on its detail page
+  // ("ambient") is also rate-limited to AMBIENT_CYCLE_MIN_INTERVAL_MS — once
+  // someone opens the detail view (SSE resultSubscriber, or a recent
+  // poll-fallback ping), that camera goes "boosted" and the artificial wait
+  // is bypassed entirely, back to cadence bounded only by (a) how fast ffmpeg
+  // decodes new frames and (b) how long the previous cycle took.
   if (hub.mode === "monitoring" && !hub.stopped && !hub.captureRunning) {
-    hub.captureRunning = true;
-    runCaptureCycle(hub).finally(() => {
-      hub.captureRunning = false;
-    });
+    const boosted =
+      hub.resultSubscribers.size > 0 ||
+      Date.now() - hub.lastViewerPingAt < POLL_ACTIVE_WINDOW_MS;
+    const dueForCycle =
+      boosted || Date.now() - hub.lastCycleStartAt >= AMBIENT_CYCLE_MIN_INTERVAL_MS;
+
+    if (dueForCycle) {
+      hub.captureRunning = true;
+      hub.lastCycleStartAt = Date.now();
+      runCaptureCycle(hub).finally(() => {
+        hub.captureRunning = false;
+      });
+    }
   }
 }
 
@@ -318,10 +367,22 @@ function teardownHub(hub: Hub, reason: string, opts: { permanent: boolean }): vo
   if (hub.stopped) return;
 
   if (!opts.permanent) {
+    // Idempotent: a stale second signal for a failure we're already
+    // recovering from (e.g. the watchdog firing, then this same kill's own
+    // 'close' event arriving right after) must not schedule ANOTHER
+    // reconnect on top of the one already pending — that's the other half
+    // of the doubling bug described in attachFfmpegHandlers.
+    if (hub.reconnectTimer !== null) return;
+
     // Non-permanent: kill ffmpeg and go dark, but keep the hub/subscribers/
     // registry entry alive so a brief hiccup doesn't force-disconnect every
     // /stream viewer, and so reconnecting can resume in place.
     clearTimeout(hub.watchdog);
+    // Strip listeners before killing — this process is being discarded on
+    // purpose, so its 'close' event firing (as a direct result of the
+    // SIGKILL below) must not re-enter here and schedule a second reconnect.
+    hub.ffmpeg.removeAllListeners("error");
+    hub.ffmpeg.removeAllListeners("close");
     if (!hub.ffmpeg.killed) hub.ffmpeg.kill("SIGKILL");
     hub.latestFrame = null; // don't keep re-analyzing a stale buffered frame
     if (hub.connected) {
@@ -488,6 +549,10 @@ export function getLiveFrame(cameraId: string, rtspUrl: string): Buffer | null {
 export function pollLiveDetections(cameraId: string, since: number): LivePollResponse | null {
   const hub = hubs.get(cameraId);
   if (!hub || hub.mode !== "monitoring") return null;
+  // Unlike the SSE path (resultSubscribers), a poll is a one-off request with
+  // no persistent connection to track — stamp a timestamp instead so onFrame
+  // can still tell "someone's on the detail page" when SSE isn't the transport.
+  hub.lastViewerPingAt = Date.now();
   const latest = hub.latest;
   if (latest.seq === since) return { seq: latest.seq, unchanged: true, monitored: true };
   return { ...latest, unchanged: false, monitored: true };
@@ -517,8 +582,7 @@ export function attachLiveResultStream(res: Response, cameraId: string): void {
   if (!hub || hub.mode !== "monitoring") {
     res.write(`event: not_monitored\ndata: ${JSON.stringify({ ts: Date.now() })}\n\n`);
   } else if (hub.latest.seq > 0) {
-    const { frame: _frame, ...payload } = hub.latest;
-    res.write(`event: result\ndata: ${JSON.stringify(payload)}\n\n`);
+    res.write(`event: result\ndata: ${JSON.stringify(hub.latest)}\n\n`);
   }
 
   const heartbeat = setInterval(() => res.write(`: heartbeat\n\n`), 25_000);
@@ -547,11 +611,30 @@ export function attachLiveResultStream(res: Response, cameraId: string): void {
 // exists at the moment the browser pushes one (POST /push-frame). This is a
 // lightweight, hub-free parallel to attachLiveResultStream/broadcastResult
 // above: the controller calls broadcastDeviceResult() once per push with the
-// same merged detections/checks/violations shape, fed to whichever SSE
+// same merged frame/detections/checks/violations shape, fed to whichever SSE
 // subscribers are currently attached to that camera.
 
 const deviceResultSubscribers = new Map<string, Set<ResultSubscriber>>();
 const deviceSeq = new Map<string, number>();
+
+// Most recently completed inference result for a device camera. A push
+// broadcasts its frame the instant it arrives (see pushFrameController) so
+// picture FPS isn't gated behind the AI round trip — it pairs that frame
+// with whatever overlay is cached here, which this push's own inference
+// then refreshes for the *next* push to pick up. Trade-off: the overlay can
+// lag the picture by about one push interval instead of always matching the
+// exact frame on screen.
+type DeviceOverlay = Pick<LiveResult, "detections" | "checkResults" | "violations">;
+const EMPTY_DEVICE_OVERLAY: DeviceOverlay = { detections: [], checkResults: [], violations: [] };
+const deviceOverlays = new Map<string, DeviceOverlay>();
+
+export function getLatestDeviceOverlay(cameraId: string): DeviceOverlay {
+  return deviceOverlays.get(cameraId) ?? EMPTY_DEVICE_OVERLAY;
+}
+
+export function setLatestDeviceOverlay(cameraId: string, overlay: DeviceOverlay): void {
+  deviceOverlays.set(cameraId, overlay);
+}
 
 /** SSE endpoint for a device-sourced camera's live detection channel. */
 export function attachDeviceLiveResultStream(res: Response, cameraId: string): void {
@@ -592,15 +675,44 @@ export function attachDeviceLiveResultStream(res: Response, cameraId: string): v
   res.on("close", cleanup);
 }
 
-/** Called once per push-frame with the merged per-mapping result. */
+/**
+ * Reserves the next display-order seq for a device camera's push. Call this
+ * as soon as a push-frame request arrives (before inference), NOT when its
+ * result is ready — pushes now fire in parallel on a fixed interval rather
+ * than waiting for the previous one's response, so two in-flight requests
+ * can finish out of order. Assigning seq at arrival keeps it tied to capture
+ * order regardless of which one's inference happens to finish first;
+ * broadcastDeviceResult() below just tags the result with whatever seq it's
+ * given rather than computing its own.
+ */
+export function nextDeviceSeq(cameraId: string): number {
+  const seq = (deviceSeq.get(cameraId) ?? 0) + 1;
+  deviceSeq.set(cameraId, seq);
+  return seq;
+}
+
+/**
+ * Called once per push-frame with the merged per-mapping result, tagged with
+ * the seq reserved for it via nextDeviceSeq() at request arrival. A slow
+ * request that finishes after a later one still broadcasts under its own
+ * (older) seq, so the frontend's monotonic-seq guard (useLiveCameraStream)
+ * can recognize it as stale and discard it instead of regressing the
+ * display to an older frame.
+ */
 export function broadcastDeviceResult(
   cameraId: string,
-  data: { width: number | null; height: number | null; detections: Detection[]; checkResults: CheckResult[]; violations: Violation[] }
+  seq: number,
+  data: {
+    frame: string | null;
+    width: number | null;
+    height: number | null;
+    detections: Detection[];
+    checkResults: CheckResult[];
+    violations: Violation[];
+  }
 ): void {
   const subs = deviceResultSubscribers.get(cameraId);
   if (!subs || subs.size === 0) return;
-  const seq = (deviceSeq.get(cameraId) ?? 0) + 1;
-  deviceSeq.set(cameraId, seq);
   const payload: LiveStreamResultPayload = { seq, ...data };
   for (const sub of subs) sub.onResult(payload);
 }
@@ -626,13 +738,27 @@ async function resolveHubContext(hub: Hub): Promise<HubContext> {
   const retentionDays = settings.retention?.dataDays ?? 30;
   const expiresAt = new Date(Date.now() + retentionDays * 24 * 60 * 60 * 1_000);
   const timezone = (settings.get?.("timezone") as string | undefined) ?? "Asia/Jakarta";
+  const cameraName = camera?.name ?? hub.cameraId;
   const rules: CameraRules | undefined =
     camera?.crowdThreshold != null ? { crowd_threshold: camera.crowdThreshold } : undefined;
   const redZones = (camera?.redZones ?? []) as Array<{ name: string; points: Array<{ x: number; y: number }> }>;
   const cooldownPeriod = camera?.cooldownPeriod ?? 0;
+  const repeatMode = settings.violationAlert?.repeatMode ?? "cooldown";
+  const repeatIntervalSeconds = settings.violationAlert?.repeatIntervalSeconds ?? 15;
   const latestUrl = camera?.latestSnapshotUrl ?? "";
 
-  const context: HubContext = { mappings, rules, redZones, cooldownPeriod, timezone, expiresAt, latestUrl };
+  const context: HubContext = {
+    mappings,
+    cameraName,
+    rules,
+    redZones,
+    cooldownPeriod,
+    repeatMode,
+    repeatIntervalSeconds,
+    timezone,
+    expiresAt,
+    latestUrl
+  };
   hub.context = context;
   hub.contextAt = Date.now();
   return context;
@@ -669,6 +795,7 @@ async function runCaptureCycle(hub: Hub): Promise<void> {
       ctx.mappings.map((mapping) =>
         runMappingInference({
           cameraId: hub.cameraId,
+          cameraName: ctx.cameraName,
           frameBuffer: frame,
           latestUrl: ctx.latestUrl,
           mapping,
@@ -676,7 +803,9 @@ async function runCaptureCycle(hub: Hub): Promise<void> {
           expiresAt: ctx.expiresAt,
           rules: ctx.rules,
           redZones: ctx.redZones,
-          cooldownPeriod: ctx.cooldownPeriod
+          cooldownPeriod: ctx.cooldownPeriod,
+          repeatMode: ctx.repeatMode,
+          repeatIntervalSeconds: ctx.repeatIntervalSeconds
         })
       )
     );
@@ -716,8 +845,7 @@ async function runCaptureCycle(hub: Hub): Promise<void> {
 
 function broadcastResult(hub: Hub): void {
   if (hub.resultSubscribers.size === 0) return;
-  const { frame: _frame, ...payload } = hub.latest;
-  for (const sub of hub.resultSubscribers) sub.onResult(payload);
+  for (const sub of hub.resultSubscribers) sub.onResult(hub.latest);
 }
 
 /**

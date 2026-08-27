@@ -16,8 +16,8 @@ AI Service (Python + gRPC + YOLO)
 
 | Folder | Peran | Port default |
 |---|---|---|
-| `frontend/` | React SPA | `80` (docker) / `5173` (dev) |
-| `backend-web/` | Express REST API + gRPC client | `8080` |
+| `frontend/` | React SPA | `8080` (docker) / `5173` (dev) |
+| `backend-web/` | Express REST API + gRPC client | `8090` (docker) / `8080` (dev) |
 | `ai/` | gRPC inference service (YOLO) | `50051` |
 
 ---
@@ -49,7 +49,7 @@ AI Service (Python + gRPC + YOLO)
    docker compose ps
    ```
 
-   Ini menyalakan: `mongodb` (:27017), `redis` (:6379), `ai` (:50051), `backend-web` (:8080), `frontend` (:80).
+   Ini menyalakan: `mongodb` (:27017), `redis` (:6379), `ai` (:50051), `backend-web` (:8090), `frontend` (:8080).
 
 3. Seed user dummy (sekali saja, setelah `backend-web` sehat):
 
@@ -57,7 +57,15 @@ AI Service (Python + gRPC + YOLO)
    docker compose exec backend-web node dist/scripts/seedDummyUsers.js
    ```
 
-4. Buka aplikasi: **http://localhost**
+   Opsional — kamera RTSP dummy untuk testing (video sample di `backend-web/temp/`, loop lewat
+   MediaMTX; detail di [backend-web/scripts/dev/README.md](backend-web/scripts/dev/README.md)):
+
+   ```powershell
+   docker compose --profile fake-rtsp up -d --build
+   docker compose exec -e RTSP_FAKE_HOST=mediamtx backend-web node dist/scripts/seedDevCameras.js
+   ```
+
+4. Buka aplikasi: **http://localhost:8080**
 
 5. Matikan:
 
@@ -144,10 +152,12 @@ Variabel `backend-web` yang **wajib diisi tanpa default**: `MONGODB_URI`, `AI_GR
 
 ## Verifikasi
 
-```powershell
-curl http://localhost:8080/health
+`backend-web` ada di port `8090` lewat Docker Compose (Opsi 1), atau `8080` kalau dijalankan manual (Opsi 2) — sesuaikan port di bawah dengan cara yang dipakai.
 
-curl -X POST http://localhost:8080/api/v1/auth/login `
+```powershell
+curl http://localhost:8090/health
+
+curl -X POST http://localhost:8090/api/v1/auth/login `
   -H "Content-Type: application/json" `
   -d '{\"email\":\"superadmin@cctv.local\",\"password\":\"SuperAdmin12345!\"}'
 ```
@@ -166,9 +176,9 @@ Login sukses mengembalikan JWT token.
 
 **`ffmpeg: command not found`** — Snapshot/live-stream butuh ffmpeg di PATH (`winget install Gyan.FFmpeg` di Windows).
 
-**Port 80/8080/27017/6379/50051 sudah dipakai** —
+**Port 8080/8090/27017/6379/50051 sudah dipakai** —
 ```powershell
-Get-NetTCPConnection -LocalPort 8080 | Select-Object LocalPort, OwningProcess
+Get-NetTCPConnection -LocalPort 8090 | Select-Object LocalPort, OwningProcess
 ```
 
 **Docker: "WSL 2 installation is incomplete"** — Jalankan `wsl --install` sebagai admin, lalu restart.

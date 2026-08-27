@@ -4,7 +4,6 @@ import {
   Activity,
   Camera,
   Bell,
-  Image as ImageIcon,
   HardDrive,
   Radio,
   AlertTriangle
@@ -231,24 +230,17 @@ export function SystemHealthPage() {
             </p>
             <span className="text-[10px] text-content-muted tabular-nums">
               {snapshot
-                ? `${snapshot.queues.infer.waiting + snapshot.queues.snapshot.waiting + snapshot.queues.notification.waiting} jobs waiting`
+                ? `${snapshot.queues.infer.waiting + snapshot.queues.notification.waiting} jobs waiting`
                 : "—"}
             </span>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <QueueStatCard
               icon={Cpu}
               label="Inference"
               stats={snapshot?.queues.infer ?? emptyStats()}
               workerCount={snapshot?.workers.infer.count ?? 0}
               workerStatus={snapshot?.workers.infer.status ?? "no_workers"}
-            />
-            <QueueStatCard
-              icon={ImageIcon}
-              label="Snapshot Capture"
-              stats={snapshot?.queues.snapshot ?? emptyStats()}
-              workerCount={snapshot?.workers.snapshot.count ?? 0}
-              workerStatus={snapshot?.workers.snapshot.status ?? "no_workers"}
             />
             <QueueStatCard
               icon={Bell}

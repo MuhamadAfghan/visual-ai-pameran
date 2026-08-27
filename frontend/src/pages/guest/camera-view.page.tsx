@@ -18,15 +18,13 @@ import { LiveCameraView } from "../../features/cameras/live-camera-view";
 import { useLiveCameraStream } from "../../features/cameras/use-live-camera-stream";
 import { GuestEventCard } from "../../features/guest/event-card";
 import { useGuestTheme } from "../../layouts/guest-theme";
-import { useAuth } from "../../app/auth-provider";
 import { useDeviceCamera } from "../../app/device-camera-provider";
+import { usePermission } from "../../hooks/use-permission";
 import { getAreaName, getSectionName } from "../../types/camera.types";
 import { formatRelative } from "../../utils/formatDate";
 import { cn } from "../../utils/cn";
 import type { Camera } from "../../types/camera.types";
 import type { DetectionEvent } from "../../types/event.types";
-
-const API_BASE = `${import.meta.env.VITE_API_URL ?? ""}/api/v1`;
 
 const STATUS_PILL: Record<Camera["status"], { color: string; label: string }> = {
   online: { color: "bg-red-500 text-white", label: "LIVE" },
@@ -38,8 +36,8 @@ export function CameraViewPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { isDark } = useGuestTheme();
-  const { token } = useAuth();
   const devCam = useDeviceCamera();
+  const { can } = usePermission();
 
   const [camera, setCamera] = useState<Camera | null>(null);
   const [events, setEvents] = useState<DetectionEvent[]>([]);
@@ -56,11 +54,15 @@ export function CameraViewPage() {
 
   const liveState = useLiveCameraStream(id, isLiveView);
 
-  // RTSP MJPEG stream URL
-  const streamUrl =
-    !isDeviceCamera && token && camera
-      ? `${API_BASE}/cameras/${camera._id}/stream?token=${encodeURIComponent(token)}`
-      : null;
+  // Guest is a legitimate capture source too (e.g. a kiosk screen with its own
+  // webcam) — request/keep the local camera running for an active device
+  // camera, same as the operator dashboard's camera-detail page. No-ops
+  // safely if this session lacks cameras:capture (see device-camera-provider).
+  useEffect(() => {
+    if (!camera || !isDeviceCamera || !camera.isActive) return;
+    void devCam.startCapture(camera._id, camera.minCaptureGapSeconds ?? 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [camera?._id, camera?.isActive, isDeviceCamera]);
 
   // Live clock for fullscreen / metadata strip
   useEffect(() => {
@@ -118,6 +120,7 @@ export function CameraViewPage() {
         videoStream={isActiveDevice ? devCam.stream : null}
         deviceError={devCam.error}
         onRetryDevice={() => void devCam.startCapture(camera._id, camera.minCaptureGapSeconds ?? 0)}
+        deviceOwnershipExpected={can("cameras", "capture")}
         mirrored
         liveState={liveState}
         cameraName={camera.name}
@@ -132,7 +135,6 @@ export function CameraViewPage() {
     ) : (
       <LiveCameraView
         source="stream"
-        streamUrl={streamUrl}
         liveState={liveState}
         cameraName={camera.name}
         showBbox={showOverlay}
@@ -219,7 +221,7 @@ export function CameraViewPage() {
           {isViewingEvent ? (
             // Replay mode: snapshot + bbox overlay
             <SnapshotWithBbox
-              src={selected?.snapshotUrl ?? ""}
+              src={selected?.originalSnapshotUrl ?? selected?.snapshotUrl ?? ""}
               alt={camera.name}
               detections={displayDetections}
               redZones={displayRedZones}

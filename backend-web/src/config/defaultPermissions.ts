@@ -3,7 +3,7 @@ import type { ModulePermission } from "../types/auth";
 export const DEFAULT_PERMISSIONS: Record<"admin" | "viewer" | "pic", ModulePermission[]> = {
   admin: [
     { module: "dashboard",       actions: ["view"] },
-    { module: "cameras",         actions: ["view", "create", "update", "stream", "snapshot", "scheduler"] },
+    { module: "cameras",         actions: ["view", "create", "update", "stream", "snapshot", "scheduler", "capture"] },
     { module: "events",          actions: ["view", "export", "acknowledge", "false_positive", "delete"] },
     { module: "areas",           actions: ["view", "create", "update", "delete"] },
     { module: "sections",        actions: ["view", "create", "update", "delete"] },
@@ -14,7 +14,7 @@ export const DEFAULT_PERMISSIONS: Record<"admin" | "viewer" | "pic", ModulePermi
   ],
   viewer: [
     { module: "dashboard",       actions: ["view"] },
-    { module: "cameras",         actions: ["view", "stream", "snapshot"] },
+    { module: "cameras",         actions: ["view", "stream", "snapshot", "capture"] },
     { module: "events",          actions: ["view", "export"] },
     { module: "areas",           actions: ["view"] },
     { module: "sections",        actions: ["view"] },
@@ -24,7 +24,7 @@ export const DEFAULT_PERMISSIONS: Record<"admin" | "viewer" | "pic", ModulePermi
   ],
   pic: [
     { module: "dashboard",       actions: ["view"] },
-    { module: "cameras",         actions: ["view", "stream", "snapshot"] },
+    { module: "cameras",         actions: ["view", "stream", "snapshot", "capture"] },
     { module: "events",          actions: ["view", "acknowledge", "false_positive"] },
     { module: "areas",           actions: ["view"] },
     { module: "sections",        actions: ["view"] },

@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { X, Eye, EyeOff, AlertTriangle, Maximize2 } from "lucide-react";
 import { FullscreenViewer } from "../cameras/camera-detail-parts";
 import { cn } from "../../utils/cn";
-import { labelColor } from "../../components/snapshot-bbox";
+import { detectionColor } from "../../components/snapshot-bbox";
 import { ConfidenceBadge } from "../../components/confidence-badge";
 import { formatDate, formatRelative } from "../../utils/formatDate";
 import {
@@ -90,7 +90,7 @@ function paintOverlay(
     const ry = oy + y1 * scale;
     const rw = (x2 - x1) * scale;
     const rh = (y2 - y1) * scale;
-    const color = labelColor(det.label);
+    const color = detectionColor(det);
     const pct = det.confidence != null ? Math.round(det.confidence * 100) : null;
     const lbl = pct != null ? `${det.label} ${pct}%` : det.label;
 
@@ -128,7 +128,7 @@ export function EventDrawer({ event, token, onClose }: Props) {
   const redZones = useMemo(() => event?.redZones ?? [], [event?.redZones]);
 
   const snapshotSrc = event?.snapshotUrl
-    ? `${API_BASE}/events/${event._id}/snapshot?token=${encodeURIComponent(token ?? "")}`
+    ? `${API_BASE}/events/${event._id}/snapshot?variant=original&token=${encodeURIComponent(token ?? "")}`
     : null;
 
   const repaint = useCallback(() => {
@@ -328,7 +328,7 @@ export function EventDrawer({ event, token, onClose }: Props) {
                   ) : (
                     <div className="divide-y divide-surface-border">
                       {detections.map((det, i) => {
-                        const color = labelColor(det.label);
+                        const color = detectionColor(det);
                         const pct =
                           det.confidence != null && !isNaN(det.confidence)
                             ? Math.round(det.confidence * 100)

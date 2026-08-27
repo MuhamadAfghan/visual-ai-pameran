@@ -109,7 +109,7 @@ export function SnapshotGrid({ events, apiBase, token, selectedId, onSelect }: S
     <div className="grid grid-cols-2 gap-1 p-1">
       {events.map((ev) => {
         const src = ev.snapshotUrl
-          ? `${apiBase}/events/${ev._id}/snapshot?token=${encodeURIComponent(token ?? "")}`
+          ? `${apiBase}/events/${ev._id}/snapshot?variant=original&token=${encodeURIComponent(token ?? "")}`
           : null;
         const isSelected = ev._id === selectedId;
         return (

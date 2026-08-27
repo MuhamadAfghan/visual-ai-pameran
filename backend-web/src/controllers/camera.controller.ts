@@ -15,12 +15,15 @@ import {
 } from "../services/camera.service";
 import { sendSuccess } from "../utils/apiResponse";
 import { logAuditEvent } from "../services/audit.service";
-import { captureRtspFrame } from "../utils/rtspCapture";
+import { captureRtspFrame, readJpegSize } from "../utils/rtspCapture";
 import {
   attachMjpegResponse,
   attachLiveResultStream,
   attachDeviceLiveResultStream,
   broadcastDeviceResult,
+  nextDeviceSeq,
+  getLatestDeviceOverlay,
+  setLatestDeviceOverlay,
   pollLiveDetections,
   getLiveFrame,
   startMonitoringHub,
@@ -45,7 +48,7 @@ const cameraBaseObject = z.object({
   rtspUrl: z.string().trim().optional(),
   sectionId: z.string().min(1),
   brand: z.string().trim().optional().default(""),
-  minCaptureGapSeconds: z.number().int().min(0).optional().default(0),
+  minCaptureGapSeconds: z.number().min(0).optional().default(0),
   cooldownPeriod: z.number().int().positive().optional().default(300),
   crowdThreshold: z.number().int().min(0).nullable().optional().default(null),
   defaultPicIds: z.array(z.string().min(1)).min(1, "Kamera wajib punya minimal 1 PIC"),
@@ -363,7 +366,25 @@ export async function pushFrameController(req: Request, res: Response, next: Nex
       throw new HttpError(400, "Endpoint hanya untuk kamera dengan sourceType device");
     }
 
+    // Reserved now (arrival order), not after inference — pushes fire in
+    // parallel on a fixed interval and can finish out of order, so this is
+    // what lets the frontend tell which of several in-flight results is
+    // actually the newest capture.
+    const seq = nextDeviceSeq(id);
+
     const frameBuffer = Buffer.from(imageBase64, "base64");
+    const size = readJpegSize(frameBuffer);
+
+    // Show the picture the instant it arrives — video FPS shouldn't wait on
+    // the AI round trip below. Paired with whatever overlay the last
+    // completed inference produced; refreshed further down for the *next*
+    // push to pick up.
+    broadcastDeviceResult(id, seq, {
+      frame: imageBase64,
+      width: size?.width ?? null,
+      height: size?.height ?? null,
+      ...getLatestDeviceOverlay(id)
+    });
 
     const { publicUrl: latestUrl } = await saveLatestSnapshot(id, frameBuffer);
     await CameraModel.findByIdAndUpdate(id, {
@@ -373,9 +394,7 @@ export async function pushFrameController(req: Request, res: Response, next: Nex
     });
 
     const result = await processFrameForCamera(id, frameBuffer, latestUrl);
-    broadcastDeviceResult(id, {
-      width: null,
-      height: null,
+    setLatestDeviceOverlay(id, {
       detections: result.detections,
       checkResults: result.checkResults,
       violations: result.violations

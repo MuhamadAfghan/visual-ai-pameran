@@ -219,7 +219,13 @@ export function CameraForm({ camera, onSubmit, onCancel, loading }: Props) {
         isActive: true
       });
     }
-  }, [camera, reset]);
+    // Reset only when switching to a different camera record (by id), not on every
+    // background refetch of the same one — for device/webcam cameras the capture
+    // loop invalidates this camera's query as often as every ~100ms while it's the
+    // active webcam, and resetting on every refetched object reference would wipe
+    // out in-progress edits mid-keystroke.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [camera?._id, reset]);
 
   const isDevice = sourceTypeValue === "device";
 
@@ -335,8 +341,7 @@ export function CameraForm({ camera, onSubmit, onCancel, loading }: Props) {
                   autoPlay
                   playsInline
                   muted
-                  className="w-full max-h-52 object-cover bg-black"
-                  style={{ transform: "scaleX(-1)" }}
+                  className="w-full max-h-52 object-cover bg-black" 
                 />
                 <div className="flex items-center justify-between px-3 py-2 border-t border-surface-border">
                   <div className="flex items-center gap-2">
@@ -450,8 +455,8 @@ export function CameraForm({ camera, onSubmit, onCancel, loading }: Props) {
             <InfoTooltip
               text={
                 isDevice
-                  ? "Jeda waktu antar pengiriman frame dari kamera browser. Semakin kecil = lebih sering deteksi tapi beban server lebih tinggi."
-                  : "Opsional. Kamera RTSP capture realtime secara continuous — isi hanya jika perlu membatasi beban ke server AI (mis. 5 = maksimal 1x tiap 5 detik). Kosongkan / 0 = tanpa batas."
+                  ? "Jeda waktu antar pengiriman frame dari kamera browser. Semakin kecil = lebih sering deteksi tapi beban server lebih tinggi. Boleh desimal, mis. 0.5 = tiap 500ms."
+                  : "Opsional. Kamera RTSP capture realtime secara continuous — isi hanya jika perlu membatasi beban ke server AI (mis. 0.5 = maksimal 1x tiap 500ms). Kosongkan / 0 = tanpa batas."
               }
             />
           </div>
@@ -460,6 +465,7 @@ export function CameraForm({ camera, onSubmit, onCancel, loading }: Props) {
             {...register("minCaptureGapSeconds")}
             placeholder={isDevice ? "30" : "0"}
             min={0}
+            step="any"
             className={inp}
           />
         </div>

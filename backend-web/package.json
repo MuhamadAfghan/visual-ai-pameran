@@ -21,6 +21,7 @@
     "seed:roles": "tsx src/scripts/seedSystemRoles.ts",
     "seed:dummy-users": "tsx src/scripts/seedDummyUsers.ts",
     "seed:dev-cameras": "tsx src/scripts/seedDevCameras.ts",
+    "seed:ai-models": "tsx src/scripts/seedAiModels.ts",
     "backfill:user-roles": "tsx src/scripts/backfillUserRoleIds.ts",
     "rtsp:start": "powershell -ExecutionPolicy Bypass -File scripts/dev/start-fake-rtsp.ps1",
     "rtsp:stop": "powershell -ExecutionPolicy Bypass -File scripts/dev/stop-fake-rtsp.ps1",

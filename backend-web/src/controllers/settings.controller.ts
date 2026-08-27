@@ -41,6 +41,13 @@ const settingsUpdateSchema = z.object({
     .object({
       maxSizeGB: z.number().min(0.1).optional()
     })
+    .optional(),
+  violationAlert: z
+    .object({
+      audioStyle: z.enum(["beep", "beep_speech"]).optional(),
+      repeatMode: z.enum(["cooldown", "continuous"]).optional(),
+      repeatIntervalSeconds: z.number().int().min(5).max(300).optional()
+    })
     .optional()
 });
 
@@ -56,6 +63,23 @@ export async function getSettingsController(
   try {
     const doc = await getSettings();
     sendSuccess(res, maskSettings(doc));
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getViolationAlertConfigController(
+  _req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const doc = await getSettings();
+    sendSuccess(res, {
+      audioStyle: doc.violationAlert?.audioStyle ?? "beep_speech",
+      repeatMode: doc.violationAlert?.repeatMode ?? "cooldown",
+      repeatIntervalSeconds: doc.violationAlert?.repeatIntervalSeconds ?? 15
+    });
   } catch (error) {
     next(error);
   }

@@ -36,7 +36,7 @@ import { useLiveCameraStream } from "./use-live-camera-stream";
 import { getCameraById } from "../../services/camera.service";
 import { getMappings, type RoiPoint, type HandrailLine } from "../../services/mapping.service";
 import { getEvents } from "../../services/event.service";
-import { SnapshotWithBbox, labelColor } from "../../components/snapshot-bbox";
+import { SnapshotWithBbox, detectionColor } from "../../components/snapshot-bbox";
 import { StatusDot } from "../../components/status-dot";
 import { Skeleton } from "../../components/skeleton";
 import { getAreaName, getSectionName } from "../../types/camera.types";
@@ -54,7 +54,7 @@ export function CameraDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { token } = useAuth();
-  const { canUpdate } = usePermission();
+  const { canUpdate, can } = usePermission();
 
   const [showBbox, setShowBbox] = useState(true);
   const [showRoi, setShowRoi] = useState(true);
@@ -152,13 +152,8 @@ export function CameraDetailPage() {
   const historicalRedZones = useMemo(() => historicalEvent?.redZones ?? [], [historicalEvent]);
 
   const pinnedSrc = pinnedSnapshot?.snapshotUrl
-    ? `${API_BASE}/events/${pinnedSnapshot._id}/snapshot?token=${encodeURIComponent(token ?? "")}`
+    ? `${API_BASE}/events/${pinnedSnapshot._id}/snapshot?variant=original&token=${encodeURIComponent(token ?? "")}`
     : null;
-
-  const streamUrl =
-    token && !isDeviceCamera
-      ? `${API_BASE}/cameras/${id}/stream?token=${encodeURIComponent(token)}`
-      : null;
 
   const displayDetections = isLiveView ? liveState.detections : historicalDetections;
 
@@ -181,11 +176,12 @@ export function CameraDetailPage() {
         videoStream={devCam.stream}
         deviceError={devCam.error}
         onRetryDevice={() => void devCam.startCapture(camera._id, camera.minCaptureGapSeconds ?? 0)}
+        deviceOwnershipExpected={can("cameras", "capture")}
         mirrored
         {...shared}
       />
     ) : (
-      <LiveCameraView source="stream" streamUrl={streamUrl} {...shared} />
+      <LiveCameraView source="stream" {...shared} />
     );
   }
 
@@ -711,7 +707,7 @@ function DetectionList({
       </div>
       <div className="divide-y divide-surface-border">
         {detections.map((det, i) => {
-          const color = labelColor(det.label);
+          const color = detectionColor(det);
           const pct =
             det.confidence != null && !isNaN(det.confidence)
               ? Math.round(det.confidence * 100)

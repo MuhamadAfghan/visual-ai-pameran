@@ -2,6 +2,7 @@ import { RouterProvider } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "./auth-provider";
 import { DeviceCameraProvider } from "./device-camera-provider";
+import { ViolationAlertProvider } from "./violation-alert-provider";
 import { appRouter } from "./router";
 import { ErrorBoundary } from "../components/error-boundary";
 
@@ -16,9 +17,11 @@ export function AppRoot() {
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <DeviceCameraProvider>
-            <RouterProvider router={appRouter} />
-          </DeviceCameraProvider>
+          <ViolationAlertProvider>
+            <DeviceCameraProvider>
+              <RouterProvider router={appRouter} />
+            </DeviceCameraProvider>
+          </ViolationAlertProvider>
         </AuthProvider>
       </QueryClientProvider>
     </ErrorBoundary>

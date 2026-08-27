@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { LayoutDashboard, Bell, Video, BarChart3, Sun, Moon, LogOut, UserCircle, User } from "lucide-react";
-import toyotaLogo from "/assets/images/toyota_logo.png";
+import toyotaLogo from "/assets/images/lumi_logo.png";
 import { useAuth } from "../app/auth-provider";
 import { useUiStore } from "../store/ui.store";
 import { cn } from "../utils/cn";
 import { NotificationBell } from "./notification-bell";
+import { ViolationAudioToggle } from "./violation-audio-toggle";
 import { getEvents } from "../services/event.service";
 
 type NavLinkSpec = {
@@ -112,6 +113,8 @@ export function PicTopBar() {
       {/* Right controls */}
       <div className="flex items-center gap-2 ml-auto">
         <NotificationBell />
+
+        <ViolationAudioToggle />
 
         <button
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}

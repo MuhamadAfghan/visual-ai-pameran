@@ -144,13 +144,15 @@ export async function pollLiveDetections(
 }
 
 // Primary transport for the unified live view: an SSE stream of capture-cycle
-// results (detections/checks/violations only — no image bytes, since pixels
-// already flow continuously over GET /:id/stream). Mirrors openSystemStream's
-// shape. Only supported for RTSP-sourced cameras; device-sourced cameras have
-// no continuous server-side decode to broadcast from (see backend
-// getCameraLiveStreamController) and should use the poll fallback instead.
+// results, including the exact analyzed frame (base64 JPEG) so the client
+// renders frame + boxes as one atomic update — mirrors LiveDetectFrame's
+// shape above. Mirrors openSystemStream's transport pattern. Works for both
+// RTSP-sourced cameras (attachLiveResultStream) and device-sourced cameras
+// (attachDeviceLiveResultStream, broadcast once per POST /push-frame) — the
+// backend picks the handler by camera.sourceType, same endpoint either way.
 export type LiveStreamResult = {
   seq: number;
+  frame: string | null;
   width: number | null;
   height: number | null;
   detections: Detection[];

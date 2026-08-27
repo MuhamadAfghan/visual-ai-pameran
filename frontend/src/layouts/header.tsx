@@ -5,6 +5,7 @@ import { useAuth } from "../app/auth-provider";
 import { useUiStore } from "../store/ui.store";
 import { cn } from "../utils/cn";
 import { NotificationBell } from "./notification-bell";
+import { ViolationAudioToggle } from "./violation-audio-toggle";
 
 const roleLabel: Record<string, string> = {
   super_admin: "Super Admin",
@@ -56,9 +57,12 @@ export function Header() {
       </button>
 
       {/* Right controls */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 ml-auto">
         {/* Notification bell */}
         <NotificationBell />
+
+        {/* Violation audio alert mute toggle */}
+        <ViolationAudioToggle />
 
         {/* Theme toggle */}
         <button

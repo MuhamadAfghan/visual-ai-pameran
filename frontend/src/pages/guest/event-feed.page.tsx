@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { getEvents } from "../../services/event.service";
 import { getCameras } from "../../services/camera.service";
-import { SnapshotWithBbox, labelColor } from "../../components/snapshot-bbox";
+import { SnapshotWithBbox, detectionColor } from "../../components/snapshot-bbox";
 import { formatDate, formatRelative } from "../../utils/formatDate";
 import { getEventConfidence } from "../../types/event.types";
 import { cn } from "../../utils/cn";
@@ -576,7 +576,7 @@ function EventDetail({
           >
             {event.snapshotUrl ? (
               <SnapshotWithBbox
-                src={event.snapshotUrl}
+                src={event.originalSnapshotUrl ?? event.snapshotUrl}
                 alt="Event snapshot"
                 detections={detections}
                 redZones={redZones}
@@ -831,7 +831,7 @@ function CheckRow({ result }: { result: CheckResult }) {
 
 function DetectionChip({ detection }: { detection: Detection }) {
   const inRedZone = detection.attributes?.in_red_zone === "true";
-  const color = inRedZone ? "#ef4444" : labelColor(detection.label);
+  const color = detectionColor(detection);
   return (
     <div
       className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border bg-surface-panel transition-colors"

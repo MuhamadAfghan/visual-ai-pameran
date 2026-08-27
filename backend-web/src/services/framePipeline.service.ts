@@ -14,6 +14,7 @@ import { publishViolation } from "../plugins/eventBus";
 import { getSettings } from "./systemSettings.service";
 import { publishLog } from "../plugins/logStream";
 import { isScheduleActive } from "../utils/schedule";
+import { toLabel } from "../utils/violationLabels";
 
 const logger = pino({ name: "frame-pipeline" });
 
@@ -41,6 +42,23 @@ export function buildCheckResults(inferResult: InferResult) {
         : null
     };
   });
+}
+
+// Unlike buildCheckResults() above (one entry per check-type, first-match-wins —
+// fine for the notification/UI summary), this keeps every violation instance the
+// AI service reported, each with its own trackId when the AI service could tell
+// individual violators apart (see ai/.../infer.py's per-violator fan-out).
+// Checks with no natural single violator (e.g. crowd_exceeded) report trackId null.
+// Used to key the cooldown per-person instead of per-camera+mapping.
+export function buildViolationInstances(inferResult: InferResult) {
+  return inferResult.violations.map((v) => ({
+    check: checkForViolation(v.type) ?? v.type,
+    type: v.type,
+    severity: v.severity,
+    score: v.score,
+    trackId: v.track_id ?? null,
+    detailsJson: v.details_json
+  }));
 }
 
 export async function saveEvidence(
@@ -76,24 +94,35 @@ export async function saveEvidence(
   }
 }
 
+function toPublishableViolations(checkResults: ReturnType<typeof buildCheckResults>) {
+  return checkResults
+    .filter((cr) => cr.isViolation)
+    .map((cr) => ({
+      check: cr.check,
+      confidence: cr.confidence,
+      severity: cr.violation?.severity ?? null,
+      label: toLabel(cr.check)
+    }));
+}
+
 export async function notifyViolation(params: {
   eventId: string;
   cameraId: string;
+  cameraName: string;
   checkResults: ReturnType<typeof buildCheckResults>;
   evidenceUrl: string | null;
   latestUrl: string;
   detectedAt: Date;
 }): Promise<void> {
-  const { eventId, cameraId, checkResults, evidenceUrl, latestUrl, detectedAt } = params;
+  const { eventId, cameraId, cameraName, checkResults, evidenceUrl, latestUrl, detectedAt } = params;
 
   await notificationQueue.add("notify", { eventId, cameraId });
 
   await publishViolation({
     eventId,
     cameraId,
-    violations: checkResults
-      .filter((cr) => cr.isViolation)
-      .map((cr) => ({ check: cr.check, confidence: cr.confidence })),
+    cameraName,
+    violations: toPublishableViolations(checkResults),
     snapshotUrl: evidenceUrl ?? latestUrl,
     detectedAt
   });
@@ -102,6 +131,38 @@ export async function notifyViolation(params: {
     { cameraId, violations: checkResults.filter((cr) => cr.isViolation).map((cr) => cr.check) },
     "Violations detected"
   );
+}
+
+// "Repeat ping" — a lightweight, audio-only re-announcement for a violation that's
+// still ongoing while suppressed by the cooldown debounce below. Deliberately does
+// NOT touch Mongo (no DetectionEvent row, no evidence snapshot, no notification
+// queue) — only an in-process throttle + one SSE emit — so "repeat while violating"
+// can't multiply DB/disk/email load the way bypassing the debounce outright would.
+const lastRepeatPingAt = new Map<string, number>();
+
+function maybeSendRepeatPing(params: {
+  key: string;
+  cameraId: string;
+  cameraName: string;
+  checkResults: ReturnType<typeof buildCheckResults>;
+  latestUrl: string;
+  repeatIntervalSeconds: number;
+}): void {
+  const { key, cameraId, cameraName, checkResults, latestUrl, repeatIntervalSeconds } = params;
+  const now = Date.now();
+  const last = lastRepeatPingAt.get(key) ?? 0;
+  if (now - last < repeatIntervalSeconds * 1_000) return;
+
+  lastRepeatPingAt.set(key, now);
+  void publishViolation({
+    eventId: null,
+    cameraId,
+    cameraName,
+    isRepeat: true,
+    violations: toPublishableViolations(checkResults),
+    snapshotUrl: latestUrl,
+    detectedAt: new Date()
+  });
 }
 
 // ─── Per-mapping inference runner ─────────────────────────────────────────────
@@ -236,30 +297,76 @@ function logInferenceResponse(
 }
 
 // Cooldown / debounce: a violation that persists across frames should count as ONE
-// occurrence, not a fresh event every cycle. If this camera+mapping already logged a
-// violation within `cooldownPeriod` seconds, the current frame is the same ongoing
-// violation — skip the event (and notification). After the window passes, a still-active
-// violation logs again as a new occurrence.
-async function isViolationDebounced(
+// occurrence, not a fresh event every cycle. Keyed per INDIVIDUAL violator (via
+// AI-assigned trackId) rather than per camera+mapping — so a different person
+// violating during another person's cooldown window still gets captured. Checks
+// where the AI service can't identify a single violator (trackId null, e.g.
+// crowd_exceeded — a whole-zone metric) fall back to the old camera+mapping-wide
+// cooldown, exactly as before this per-person distinction existed.
+async function getUndebouncedViolationInstances(
   cameraId: string,
   mappingId: ActiveMapping["_id"],
-  cooldownPeriod: number
-): Promise<boolean> {
+  cooldownPeriod: number,
+  violationInstances: ReturnType<typeof buildViolationInstances>
+): Promise<ReturnType<typeof buildViolationInstances>> {
   const since = new Date(Date.now() - cooldownPeriod * 1_000);
-  const recent = await DetectionEventModel.exists({
-    cameraId,
-    mappingId,
-    isViolation: true,
-    detectedAt: { $gte: since }
+  const trackedIds = [...new Set(violationInstances.map((v) => v.trackId).filter((id): id is number => id != null))];
+  const hasUntracked = violationInstances.some((v) => v.trackId == null);
+
+  let coveredTrackIds = new Set<number>();
+  let hasRecentUntracked = false;
+  if (trackedIds.length > 0 || hasUntracked) {
+    const recentEvents = await DetectionEventModel.find(
+      { cameraId, mappingId, isViolation: true, detectedAt: { $gte: since } },
+      { violatingTrackIds: 1, hasUntrackedViolation: 1 }
+    ).lean();
+    for (const ev of recentEvents) {
+      for (const id of ev.violatingTrackIds ?? []) coveredTrackIds.add(id);
+      if (ev.hasUntrackedViolation) hasRecentUntracked = true;
+    }
+  }
+
+  const undebounced = violationInstances.filter((v) => {
+    if (v.trackId != null) return !coveredTrackIds.has(v.trackId);
+    return !hasRecentUntracked;
   });
-  if (!recent) return false;
-  publishLog({
-    level: "info",
-    source: "system",
-    msg: `Violation debounced (cooldown ${cooldownPeriod}s) → cameraId=${cameraId} — same ongoing violation, not re-logged`,
-    meta: { cameraId, mappingId: String(mappingId), cooldownPeriod }
-  });
-  return true;
+
+  if (undebounced.length === 0) {
+    publishLog({
+      level: "info",
+      source: "system",
+      msg: `Violation debounced (cooldown ${cooldownPeriod}s) → cameraId=${cameraId} — same ongoing violator(s), not re-logged`,
+      meta: { cameraId, mappingId: String(mappingId), cooldownPeriod }
+    });
+  }
+  return undebounced;
+}
+
+// Serializes the debounce-check → evidence-save → event-create section per
+// camera+mapping. Device-camera pushes now fire in parallel (not gated on
+// the previous push's response), so without this, two concurrent frames for
+// the same camera+mapping could both pass isViolationDebounced() before
+// either has written its DetectionEvent — producing duplicate events/
+// notifications for what should count as one ongoing violation. Only this
+// section queues; inference itself (the expensive part) still runs fully in
+// parallel, and a queue only forms here on an actual violation, not every
+// frame.
+const violationLocks = new Map<string, Promise<void>>();
+
+function withViolationLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const previous = violationLocks.get(key) ?? Promise.resolve();
+  const result = previous.then(fn);
+  // A separate never-rejecting marker, so the next caller for this key is
+  // released regardless of whether we threw — storing `result` itself would
+  // wedge the lock forever after the first failure.
+  violationLocks.set(
+    key,
+    result.then(
+      () => undefined,
+      () => undefined
+    )
+  );
+  return result;
 }
 
 export type LiveDetection = {
@@ -284,6 +391,7 @@ const NO_LIVE_DATA = { detections: [] as LiveDetection[], checkResults: [], viol
 
 export async function runMappingInference(params: {
   cameraId: string;
+  cameraName: string;
   frameBuffer: Buffer;
   latestUrl: string;
   mapping: ActiveMapping;
@@ -295,8 +403,26 @@ export async function runMappingInference(params: {
    *  prior one on the same camera+mapping is treated as the same ongoing violation
    *  and skipped (no new event, no notification). 0 disables debounce. */
   cooldownPeriod: number;
+  /** "cooldown" (default): rely solely on cooldownPeriod above for re-alerting.
+   *  "continuous": additionally re-announce (audio-only, no DB writes) every
+   *  repeatIntervalSeconds while the violation keeps being detected. */
+  repeatMode: "cooldown" | "continuous";
+  repeatIntervalSeconds: number;
 }): Promise<MappingInferenceResult> {
-  const { cameraId, frameBuffer, latestUrl, mapping, timezone, expiresAt, rules, redZones, cooldownPeriod } = params;
+  const {
+    cameraId,
+    cameraName,
+    frameBuffer,
+    latestUrl,
+    mapping,
+    timezone,
+    expiresAt,
+    rules,
+    redZones,
+    cooldownPeriod,
+    repeatMode,
+    repeatIntervalSeconds
+  } = params;
   const mappingId = String(mapping._id);
 
   if (!isScheduleActive(mapping.schedule as Parameters<typeof isScheduleActive>[0], timezone)) {
@@ -318,6 +444,7 @@ export async function runMappingInference(params: {
   if (!inferResult) return { eventId: null, hasViolation: false, ...NO_LIVE_DATA };
 
   const checkResults = buildCheckResults(inferResult);
+  const violationInstances = buildViolationInstances(inferResult);
   const hasViolation = checkResults.some((cr) => cr.isViolation);
   const mappedDetections: LiveDetection[] = inferResult.detections.map((d) => ({
     label: d.label,
@@ -341,31 +468,69 @@ export async function runMappingInference(params: {
     return { eventId: null, hasViolation: false, ...liveData };
   }
 
-  if (cooldownPeriod > 0 && (await isViolationDebounced(cameraId, mapping._id, cooldownPeriod))) {
+  const outcome = await withViolationLock(`${cameraId}:${mappingId}`, async () => {
+    if (cooldownPeriod > 0) {
+      const undebounced = await getUndebouncedViolationInstances(
+        cameraId,
+        mapping._id,
+        cooldownPeriod,
+        violationInstances
+      );
+      if (undebounced.length === 0) {
+        return { debounced: true as const };
+      }
+    }
+
+    const { evidenceUrl, evidencePath, originalEvidenceUrl, originalEvidencePath } =
+      await saveEvidence(cameraId, frameBuffer, mappedDetections, redZones);
+
+    // Recorded from ALL current violators (not just the newly-undebounced ones) —
+    // this capture's snapshot shows everyone violating right now, so it re-baselines
+    // the cooldown for each of them, tracked or not.
+    const violatingTrackIds = [
+      ...new Set(violationInstances.map((v) => v.trackId).filter((id): id is number => id != null))
+    ];
+    const hasUntrackedViolation = violationInstances.some((v) => v.trackId == null);
+
+    const event = await DetectionEventModel.create({
+      cameraId,
+      modelId: (mapping.modelId as unknown as { _id: unknown })._id,
+      mappingId: mapping._id,
+      detectedAt: new Date(),
+      checkResults,
+      isViolation: true,
+      detections: mappedDetections,
+      violatingTrackIds,
+      hasUntrackedViolation,
+      snapshotPath: evidencePath,
+      snapshotUrl: evidenceUrl,
+      originalSnapshotPath: originalEvidencePath,
+      originalSnapshotUrl: originalEvidenceUrl,
+      expiresAt
+    });
+
+    return { debounced: false as const, event, evidenceUrl };
+  });
+
+  const lockKey = `${cameraId}:${mappingId}`;
+
+  if (outcome.debounced) {
+    if (repeatMode === "continuous") {
+      maybeSendRepeatPing({ key: lockKey, cameraId, cameraName, checkResults, latestUrl, repeatIntervalSeconds });
+    }
     return { eventId: null, hasViolation: true, ...liveData };
   }
 
-  const { evidenceUrl, evidencePath, originalEvidenceUrl, originalEvidencePath } =
-    await saveEvidence(cameraId, frameBuffer, mappedDetections, redZones);
+  // A real (non-debounced) notify just fired — reset the repeat-ping clock so
+  // the next repeat is timed from this fresh alert, not from an earlier cycle.
+  lastRepeatPingAt.set(lockKey, Date.now());
 
-  const event = await DetectionEventModel.create({
-    cameraId,
-    modelId: (mapping.modelId as unknown as { _id: unknown })._id,
-    mappingId: mapping._id,
-    detectedAt: new Date(),
-    checkResults,
-    isViolation: true,
-    detections: mappedDetections,
-    snapshotPath: evidencePath,
-    snapshotUrl: evidenceUrl,
-    originalSnapshotPath: originalEvidencePath,
-    originalSnapshotUrl: originalEvidenceUrl,
-    expiresAt
-  });
+  const { event, evidenceUrl } = outcome;
 
   await notifyViolation({
     eventId: event._id.toString(),
     cameraId,
+    cameraName,
     checkResults,
     evidenceUrl,
     latestUrl,
@@ -406,15 +571,31 @@ export async function processFrameForCamera(
   const timezone = (settings.get?.("timezone") as string | undefined) ?? "Asia/Jakarta";
 
   const camera = await CameraModel.findById(cameraId).lean();
+  const cameraName = camera?.name ?? cameraId;
   const rules: CameraRules | undefined =
     camera?.crowdThreshold != null ? { crowd_threshold: camera.crowdThreshold } : undefined;
   const redZones = (camera?.redZones ?? []) as Array<{ name: string; points: Array<{ x: number; y: number }> }>;
   // Per-camera debounce window for repeated violations (0 = disabled).
   const cooldownPeriod = camera?.cooldownPeriod ?? 0;
+  const repeatMode = settings.violationAlert?.repeatMode ?? "cooldown";
+  const repeatIntervalSeconds = settings.violationAlert?.repeatIntervalSeconds ?? 15;
 
   const results = await Promise.allSettled(
     mappings.map((mapping) =>
-      runMappingInference({ cameraId, frameBuffer, latestUrl, mapping, timezone, expiresAt, rules, redZones, cooldownPeriod })
+      runMappingInference({
+        cameraId,
+        cameraName,
+        frameBuffer,
+        latestUrl,
+        mapping,
+        timezone,
+        expiresAt,
+        rules,
+        redZones,
+        cooldownPeriod,
+        repeatMode,
+        repeatIntervalSeconds
+      })
     )
   );
 
